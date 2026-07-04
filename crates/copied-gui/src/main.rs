@@ -1,5 +1,6 @@
 mod instance_lock;
 mod ipc_client;
+mod ipc_worker;
 
 use copied_core::Command;
 use ipc_client::IpcClient;
