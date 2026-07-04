@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-use copied_core::ItemId;
+use copied_core::{Category, ItemId};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -32,6 +32,8 @@ pub struct Item {
     pub kind: ItemKind,
     pub content_hash: [u8; 32],
     pub copied_at: SystemTime,
+    #[serde(default)]
+    pub category: Category,
 }
 
 impl Item {
@@ -42,6 +44,7 @@ impl Item {
             kind: ItemKind::Text(content),
             content_hash: hash,
             copied_at: SystemTime::now(),
+            category: Category::default(),
         }
     }
 
@@ -55,6 +58,7 @@ impl Item {
             },
             content_hash,
             copied_at: SystemTime::now(),
+            category: Category::default(),
         }
     }
 }
@@ -63,6 +67,11 @@ impl Item {
 pub enum PinError {
     NotFound,
     LimitReached,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum CategoryError {
+    NotFound,
 }
 
 #[derive(Debug, PartialEq)]
@@ -174,6 +183,19 @@ impl Stack {
         let item = self.pins.remove(pos);
         let evicted = self.insert(item);
         UnpinOutcome::Unpinned { evicted }
+    }
+
+    /// Atualiza a categoria de um item, pinado ou não.
+    pub fn set_category(&mut self, id: ItemId, category: Category) -> Result<(), CategoryError> {
+        if let Some(item) = self.items.iter_mut().find(|i| i.id == id) {
+            item.category = category;
+            return Ok(());
+        }
+        if let Some(item) = self.pins.iter_mut().find(|i| i.id == id) {
+            item.category = category;
+            return Ok(());
+        }
+        Err(CategoryError::NotFound)
     }
 
     /// Remove o item de onde ele estiver (não-pinado ou pinado).
@@ -361,6 +383,36 @@ mod tests {
     fn delete_unknown_id_returns_none() {
         let mut stack = Stack::default();
         assert_eq!(stack.delete(Uuid::new_v4()), None);
+    }
+
+    #[test]
+    fn set_category_updates_existing_item() {
+        let mut stack = Stack::default();
+        stack.push_text("a".into());
+        let id = stack.items().next().unwrap().id;
+
+        stack.set_category(id, Category::Url).expect("deveria atualizar");
+
+        assert_eq!(stack.items().next().unwrap().category, Category::Url);
+    }
+
+    #[test]
+    fn set_category_unknown_id_returns_not_found() {
+        let mut stack = Stack::default();
+        let result = stack.set_category(Uuid::new_v4(), Category::Url);
+        assert_eq!(result, Err(CategoryError::NotFound));
+    }
+
+    #[test]
+    fn set_category_works_on_pinned_item() {
+        let mut stack = Stack::default();
+        stack.push_text("a".into());
+        let id = stack.items().next().unwrap().id;
+        stack.pin(id).unwrap();
+
+        stack.set_category(id, Category::Codigo).expect("deveria atualizar item pinado");
+
+        assert_eq!(stack.pins().next().unwrap().category, Category::Codigo);
     }
 
     #[test]
