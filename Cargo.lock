@@ -650,7 +650,9 @@ dependencies = [
  "copied-core",
  "iced",
  "iced_layershell",
+ "libc",
  "serde_json",
+ "tempfile",
  "wl-clipboard-rs",
 ]
 
