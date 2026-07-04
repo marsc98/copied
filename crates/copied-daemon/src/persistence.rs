@@ -175,4 +175,36 @@ mod tests {
 
         delete_image(&path).expect("deveria ser idempotente, sem erro");
     }
+
+    #[test]
+    fn load_defaults_category_for_snapshot_without_field() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("stack.json");
+
+        let mut stack = Stack::default();
+        stack.push_text("hello".into());
+        save(&path, &stack).unwrap();
+
+        // Simula um stack.json gravado antes desta feature, sem o campo `category`.
+        let mut snapshot: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        for key in ["items", "pins"] {
+            if let Some(list) = snapshot.get_mut(key).and_then(|v| v.as_array_mut()) {
+                for item in list {
+                    if let Some(obj) = item.as_object_mut() {
+                        obj.remove("category");
+                    }
+                }
+            }
+        }
+        fs::write(&path, serde_json::to_string(&snapshot).unwrap()).unwrap();
+
+        let loaded = load(&path);
+
+        assert_eq!(loaded.items().count(), 1, "pilha não deve ser descartada");
+        assert_eq!(
+            loaded.items().next().unwrap().category,
+            copied_core::Category::default()
+        );
+    }
 }
