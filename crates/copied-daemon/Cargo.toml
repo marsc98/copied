@@ -1,0 +1,17 @@
+[package]
+name = "copied-daemon"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+copied-core = { path = "../copied-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4", "serde"] }
+wl-clipboard-rs = "0.9"
+wayland-client = "0.31"
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+
+[dev-dependencies]
+tempfile = "3"
