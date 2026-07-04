@@ -1,3 +1,4 @@
+mod instance_lock;
 mod ipc_client;
 
 use copied_core::Command;
