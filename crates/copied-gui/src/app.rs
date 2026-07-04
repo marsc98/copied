@@ -4,7 +4,7 @@ use copied_core::{Command, ItemId, ItemKindView, ItemView, Response};
 use futures::stream::{self, Stream, StreamExt};
 use iced::keyboard::key::Named;
 use iced::keyboard::{Event as KeyboardEvent, Key};
-use iced::widget::{button, column, container, mouse_area, row, scrollable, text};
+use iced::widget::{button, column, container, mouse_area, row, scrollable, text, text_input};
 use iced::{Element, Length, Subscription, Task};
 
 use crate::ipc_worker;
@@ -19,6 +19,7 @@ enum PendingAction {
 
 pub struct AppState {
     items: Vec<ItemView>,
+    search: String,
     selected: Option<ItemId>,
     hovered: Option<ItemId>,
     status: Option<String>,
@@ -36,6 +37,7 @@ pub enum Message {
     ItemClicked(ItemId),
     TogglePinClicked(ItemId),
     MoveSelection(isize),
+    SearchChanged(String),
     CopySelected,
     DeleteSelected,
     TogglePinSelected,
@@ -46,6 +48,7 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             items: Vec::new(),
+            search: String::new(),
             selected: None,
             hovered: None,
             status: None,
@@ -66,27 +69,43 @@ impl AppState {
         }
     }
 
+    fn filtered_items(&self) -> Vec<&ItemView> {
+        if self.search.trim().is_empty() {
+            return self.items.iter().collect();
+        }
+        let needle = self.search.to_lowercase();
+        self.items
+            .iter()
+            .filter(|item| render_content(item).to_lowercase().contains(&needle))
+            .collect()
+    }
+
     fn clamp_selection(&mut self) {
-        if self.items.is_empty() {
+        let visible = self.filtered_items();
+        if visible.is_empty() {
             self.selected = None;
             return;
         }
-        if self.selected.is_none_or(|id| !self.items.iter().any(|item| item.id == id)) {
-            self.selected = Some(self.items[0].id);
+        if self
+            .selected
+            .is_none_or(|id| !visible.iter().any(|item| item.id == id))
+        {
+            self.selected = Some(visible[0].id);
         }
     }
 
     fn move_selection(&mut self, delta: isize) {
-        if self.items.is_empty() {
+        let visible = self.filtered_items();
+        if visible.is_empty() {
             return;
         }
-        let len = self.items.len() as isize;
+        let len = visible.len() as isize;
         let current = self
             .selected
-            .and_then(|id| self.items.iter().position(|item| item.id == id))
+            .and_then(|id| visible.iter().position(|item| item.id == id))
             .unwrap_or(0) as isize;
         let next = (current + delta).rem_euclid(len) as usize;
-        self.selected = Some(self.items[next].id);
+        self.selected = Some(visible[next].id);
     }
 }
 
@@ -133,6 +152,10 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             toggle_pin(state, id);
         }
         Message::MoveSelection(delta) => state.move_selection(delta),
+        Message::SearchChanged(value) => {
+            state.search = value;
+            state.clamp_selection();
+        }
         Message::CopySelected => {
             if let Some(id) = state.selected {
                 state.send(Command::CopyToClipboard { id }, PendingAction::Copy);
@@ -166,16 +189,24 @@ fn toggle_pin(state: &mut AppState, id: ItemId) {
 }
 
 pub fn view(state: &AppState) -> Element<'_, Message> {
+    let search_box = text_input("Buscar…", &state.search)
+        .on_input(Message::SearchChanged)
+        .width(Length::Fill);
+
+    let filtered = state.filtered_items();
+
     let body: Element<'_, Message> = if state.items.is_empty() {
         text("Pilha vazia — copie algo pra começar.").into()
+    } else if filtered.is_empty() {
+        text("Nenhum resultado pra essa busca.").into()
     } else {
-        let rows = state.items.iter().map(|item| render_item(state, item));
+        let rows = filtered.into_iter().map(|item| render_item(state, item));
         scrollable(column(rows).width(Length::Fill)).into()
     };
 
     let status = text(state.status.clone().unwrap_or_default());
 
-    column![body, status].width(Length::Fill).into()
+    column![search_box, body, status].width(Length::Fill).into()
 }
 
 fn render_item<'a>(state: &AppState, item: &'a ItemView) -> Element<'a, Message> {
