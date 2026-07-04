@@ -1,3 +1,4 @@
+mod categorize;
 mod clipboard_write;
 mod ipc;
 mod persistence;
@@ -9,6 +10,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+use copied_core::Category;
 use ipc::DaemonState;
 use watcher::ClipboardChange;
 
@@ -56,14 +58,22 @@ fn handle_clipboard_change(
 
     match change {
         ClipboardChange::Text(text) => {
-            guard.stack.push_text(text);
+            let category = categorize::detect(&text);
+            if guard.stack.push_text(text) == stack::PushOutcome::Inserted {
+                let id = guard.stack.items().next().map(|item| item.id);
+                if let Some(id) = id {
+                    let _ = guard.stack.set_category(id, category);
+                }
+            }
         }
         ClipboardChange::Image { bytes, mime } => {
             let hash = stack::content_hash(&bytes);
             if !guard.stack.touch(&hash) {
                 match persistence::save_image(cache_dir, &hash, &bytes, &mime) {
                     Ok(path) => {
-                        let item = stack::Item::new_image(path, mime, bytes.len() as u64, hash);
+                        let mut item =
+                            stack::Item::new_image(path, mime, bytes.len() as u64, hash);
+                        item.category = Category::Imagem;
                         if let Some(evicted) = guard.stack.insert(item) {
                             if let stack::ItemKind::Image { path, .. } = &evicted.kind {
                                 if let Err(err) = persistence::delete_image(path) {
