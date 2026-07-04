@@ -12,6 +12,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 wl-clipboard-rs = "0.9"
 wayland-client = "0.31"
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+base64 = "0.22.1"
 
 [dev-dependencies]
 tempfile = "3"

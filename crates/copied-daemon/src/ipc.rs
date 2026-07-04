@@ -9,7 +9,7 @@ pub use copied_core::socket_path;
 
 use crate::clipboard_write;
 use crate::persistence;
-use crate::stack::{Item, ItemKind, PinError, Stack, UnpinOutcome};
+use crate::stack::{CategoryError, Item, ItemKind, PinError, Stack, UnpinOutcome};
 
 /// Estado compartilhado do daemon: a pilha em memória e onde persisti-la.
 pub struct DaemonState {
@@ -135,6 +135,38 @@ fn handle_command(state: &mut DaemonState, cmd: Command) -> Response {
         },
 
         Command::CopyToClipboard { id } => copy_to_clipboard(state, id),
+
+        Command::GetImageBytes { id } => get_image_bytes(state, id),
+
+        Command::SetCategory { id, category } => match state.stack.set_category(id, category) {
+            Ok(()) => {
+                state.persist();
+                Response::Ack
+            }
+            Err(CategoryError::NotFound) => not_found(),
+        },
+    }
+}
+
+fn get_image_bytes(state: &DaemonState, id: copied_core::ItemId) -> Response {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+    let Some(item) = state.stack.get(id) else {
+        return not_found();
+    };
+    let ItemKind::Image { path, mime, .. } = &item.kind else {
+        return Response::Error {
+            message: "item não é uma imagem".into(),
+        };
+    };
+    match std::fs::read(path) {
+        Ok(bytes) => Response::ImageBytes {
+            mime: mime.clone(),
+            data_base64: STANDARD.encode(bytes),
+        },
+        Err(err) => Response::Error {
+            message: format!("falha lendo arquivo de imagem: {err}"),
+        },
     }
 }
 
@@ -186,6 +218,89 @@ fn list_views(stack: &Stack) -> Vec<ItemView> {
     pins.chain(items).collect()
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use copied_core::Category;
+
+    fn test_state() -> (DaemonState, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let stack_path = dir.path().join("stack.json");
+        (DaemonState::new(Stack::default(), stack_path), dir)
+    }
+
+    #[test]
+    fn handle_get_image_bytes_returns_bytes_for_existing_image() {
+        let (mut state, dir) = test_state();
+        let bytes = b"fake-png-bytes";
+        let path = dir.path().join("img.png");
+        std::fs::write(&path, bytes).unwrap();
+        let hash = crate::stack::content_hash(bytes);
+        let item = Item::new_image(path, "image/png".into(), bytes.len() as u64, hash);
+        let id = item.id;
+        state.stack.insert(item);
+
+        let response = handle_command(&mut state, Command::GetImageBytes { id });
+
+        match response {
+            Response::ImageBytes { mime, data_base64 } => {
+                assert_eq!(mime, "image/png");
+                use base64::{engine::general_purpose::STANDARD, Engine as _};
+                assert_eq!(STANDARD.decode(data_base64).unwrap(), bytes);
+            }
+            other => panic!("esperava Response::ImageBytes, veio {other:?}"),
+        }
+    }
+
+    #[test]
+    fn handle_get_image_bytes_errors_when_file_missing() {
+        let (mut state, dir) = test_state();
+        let path = dir.path().join("missing.png");
+        let hash = crate::stack::content_hash(b"x");
+        let item = Item::new_image(path, "image/png".into(), 1, hash);
+        let id = item.id;
+        state.stack.insert(item);
+
+        let response = handle_command(&mut state, Command::GetImageBytes { id });
+
+        assert!(matches!(response, Response::Error { .. }));
+    }
+
+    #[test]
+    fn handle_set_category_updates_item() {
+        let (mut state, _dir) = test_state();
+        let item = Item::new_text("hello".into());
+        let id = item.id;
+        state.stack.insert(item);
+
+        let response = handle_command(
+            &mut state,
+            Command::SetCategory {
+                id,
+                category: Category::Url,
+            },
+        );
+
+        assert_eq!(response, Response::Ack);
+        assert_eq!(state.stack.get(id).unwrap().category, Category::Url);
+    }
+
+    #[test]
+    fn handle_set_category_errors_on_unknown_id() {
+        let (mut state, _dir) = test_state();
+
+        let response = handle_command(
+            &mut state,
+            Command::SetCategory {
+                id: copied_core::ItemId::new_v4(),
+                category: Category::Url,
+            },
+        );
+
+        assert!(matches!(response, Response::Error { .. }));
+    }
+}
+
 fn item_view(item: &Item, pinned: bool) -> ItemView {
     let kind = match &item.kind {
         ItemKind::Text(text) => ItemKindView::Text {
@@ -203,5 +318,6 @@ fn item_view(item: &Item, pinned: bool) -> ItemView {
         kind,
         pinned,
         copied_at: item.copied_at,
+        category: item.category,
     }
 }

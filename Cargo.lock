@@ -184,6 +184,7 @@ dependencies = [
 name = "copied-daemon"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "copied-core",
  "serde",
  "serde_json",
