@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use copied_core::{Command, ItemKindView, ItemView, Response};
+pub use copied_core::socket_path;
 
 use crate::clipboard_write;
 use crate::persistence;
@@ -29,17 +30,6 @@ impl DaemonState {
             );
         }
     }
-}
-
-/// `$XDG_RUNTIME_DIR/copied.sock` — mesma convenção usada pelo cliente TUI.
-pub fn socket_path() -> io::Result<PathBuf> {
-    let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR").ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::NotFound,
-            "XDG_RUNTIME_DIR não está setada; não é possível criar o socket do daemon",
-        )
-    })?;
-    Ok(Path::new(&runtime_dir).join("copied.sock"))
 }
 
 /// Sobe o servidor: aceita conexões em loop, uma thread por conexão.
