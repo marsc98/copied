@@ -1,3 +1,4 @@
+mod app;
 mod instance_lock;
 mod ipc_client;
 mod ipc_worker;
