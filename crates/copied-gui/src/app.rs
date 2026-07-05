@@ -1,10 +1,14 @@
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::mpsc::Sender;
 
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine as _;
 use copied_core::{Command, ItemId, ItemKindView, ItemView, Response};
 use futures::stream::{self, Stream, StreamExt};
 use iced::keyboard::key::Named;
 use iced::keyboard::{Event as KeyboardEvent, Key};
-use iced::widget::{button, column, container, mouse_area, row, scrollable, text, text_input};
+use iced::widget::image::Handle as ImageHandle;
+use iced::widget::{button, column, container, image, mouse_area, row, scrollable, text, text_input};
 use iced::{Element, Length, Subscription, Task};
 use iced_layershell::to_layer_message;
 
@@ -16,6 +20,7 @@ enum PendingAction {
     Copy,
     Delete,
     TogglePin,
+    FetchImage(ItemId),
 }
 
 pub struct AppState {
@@ -25,7 +30,9 @@ pub struct AppState {
     hovered: Option<ItemId>,
     status: Option<String>,
     ipc_tx: Option<Sender<Command>>,
-    pending: Option<PendingAction>,
+    pending: VecDeque<PendingAction>,
+    image_cache: HashMap<ItemId, ImageHandle>,
+    image_requested: HashSet<ItemId>,
 }
 
 #[to_layer_message]
@@ -54,14 +61,32 @@ impl AppState {
             hovered: None,
             status: None,
             ipc_tx: None,
-            pending: None,
+            pending: VecDeque::new(),
+            image_cache: HashMap::new(),
+            image_requested: HashSet::new(),
         }
     }
 
     fn send(&mut self, cmd: Command, action: PendingAction) {
         if let Some(tx) = &self.ipc_tx {
-            self.pending = Some(action);
+            self.pending.push_back(action);
             let _ = tx.send(cmd);
+        }
+    }
+
+    /// Dispara `GetImageBytes` uma vez por item de imagem ainda não
+    /// cacheado/pedido — chamado sempre que a lista é atualizada.
+    fn queue_missing_image_fetches(&mut self) {
+        let ids: Vec<ItemId> = self
+            .items
+            .iter()
+            .filter(|item| matches!(item.kind, ItemKindView::Image { .. }))
+            .map(|item| item.id)
+            .filter(|id| !self.image_requested.contains(id))
+            .collect();
+        for id in ids {
+            self.image_requested.insert(id);
+            self.send(Command::GetImageBytes { id }, PendingAction::FetchImage(id));
         }
     }
 
@@ -114,17 +139,17 @@ impl Default for AppState {
 pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
     match message {
         Message::IpcConnected(tx) => {
-            let _ = tx.send(Command::List);
-            state.pending = Some(PendingAction::List);
             state.ipc_tx = Some(tx);
+            state.send(Command::List, PendingAction::List);
             Task::none()
         }
         Message::IpcResponse(response) => {
-            let action = state.pending.take();
+            let action = state.pending.pop_front();
             match response {
                 Response::Items(items) => {
                     state.items = items;
                     state.clamp_selection();
+                    state.queue_missing_image_fetches();
                     Task::none()
                 }
                 Response::Ack => match action {
@@ -137,10 +162,19 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     _ => Task::none(),
                 },
                 Response::Error { message } => {
-                    state.status = Some(message);
+                    if !matches!(action, Some(PendingAction::FetchImage(_))) {
+                        state.status = Some(message);
+                    }
                     Task::none()
                 }
-                Response::ImageBytes { .. } => Task::none(),
+                Response::ImageBytes { data_base64, .. } => {
+                    if let Some(PendingAction::FetchImage(id)) = action {
+                        if let Ok(bytes) = BASE64.decode(data_base64) {
+                            state.image_cache.insert(id, ImageHandle::from_bytes(bytes));
+                        }
+                    }
+                    Task::none()
+                }
             }
         }
         Message::ItemHovered(id) => {
@@ -233,12 +267,25 @@ fn render_item<'a>(state: &AppState, item: &'a ItemView) -> Element<'a, Message>
         "  "
     };
     let pin_marker = if item.pinned { "[pin] " } else { "" };
-    let label = text(format!("{marker}{pin_marker}{}", render_content(item)));
+    let prefix = format!("{marker}{pin_marker}");
+
+    let preview: Element<'_, Message> =
+        match (&item.kind, state.image_cache.get(&item.id)) {
+            (ItemKindView::Image { .. }, Some(handle)) => row![
+                text(prefix),
+                image(handle.clone())
+                    .width(Length::Fixed(48.0))
+                    .height(Length::Fixed(48.0)),
+            ]
+            .spacing(6)
+            .into(),
+            _ => text(format!("{prefix}{}", render_content(item))).into(),
+        };
 
     let pin_button = button(if item.pinned { "unpin" } else { "pin" })
         .on_press(Message::TogglePinClicked(item.id));
 
-    let content = row![label, pin_button].width(Length::Fill);
+    let content = row![preview, pin_button].width(Length::Fill);
 
     mouse_area(container(content).width(Length::Fill))
         .on_press(Message::ItemClicked(item.id))
