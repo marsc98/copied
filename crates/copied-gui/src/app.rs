@@ -9,7 +9,7 @@ use iced::keyboard::key::Named;
 use iced::keyboard::{Event as KeyboardEvent, Key};
 use iced::widget::image::Handle as ImageHandle;
 use iced::widget::{
-    button, column, container, image, mouse_area, row, scrollable, text, text_input,
+    button, column, container, image, mouse_area, row, rule, scrollable, text, text_input,
 };
 use iced::{Element, Length, Subscription, Task};
 use iced_layershell::to_layer_message;
@@ -441,11 +441,24 @@ fn view_stack(state: &AppState) -> Element<'_, Message> {
     } else if filtered.is_empty() {
         text("Nenhum resultado pra essa busca.").into()
     } else {
-        let rows = filtered
+        let (pinned, normal): (Vec<&ItemView>, Vec<&ItemView>) =
+            filtered.into_iter().partition(|item| item.pinned);
+
+        let mut sections: Vec<Element<'_, Message>> = Vec::new();
+        if !pinned.is_empty() {
+            let pin_rows = pinned
+                .into_iter()
+                .map(|item| render_item(state, item, None));
+            sections.push(column(pin_rows).width(Length::Fill).spacing(4).into());
+            sections.push(rule::horizontal(1).into());
+        }
+        let normal_rows = normal
             .into_iter()
             .enumerate()
-            .map(|(index, item)| render_item(state, item, index + 1));
-        scrollable(column(rows).width(Length::Fill).spacing(4))
+            .map(|(index, item)| render_item(state, item, Some(index + 1)));
+        sections.push(column(normal_rows).width(Length::Fill).spacing(4).into());
+
+        scrollable(column(sections).width(Length::Fill).spacing(16))
             .id(LIST_ID)
             .into()
     }
@@ -490,26 +503,27 @@ fn view_symbols(state: &AppState) -> Element<'_, Message> {
     }
 }
 
-fn render_item<'a>(state: &AppState, item: &'a ItemView, position: usize) -> Element<'a, Message> {
+fn render_item<'a>(
+    state: &AppState,
+    item: &'a ItemView,
+    position: Option<usize>,
+) -> Element<'a, Message> {
     let is_selected = state.selected == Some(item.id);
     let is_hovered = state.hovered == Some(item.id);
-    let pin_marker = if item.pinned { "[pin] " } else { "" };
+    let prefix = position.map(|n| format!("{n} | ")).unwrap_or_default();
 
     let preview: Element<'_, Message> = match (&item.kind, state.image_cache.get(&item.id)) {
         (ItemKindView::Image { .. }, Some(handle)) => row![
-            text(format!("{position}. {pin_marker}")),
+            text(prefix),
             image(handle.clone())
                 .width(Length::Fixed(48.0))
                 .height(Length::Fixed(48.0)),
         ]
         .spacing(6)
         .into(),
-        _ => text(format!(
-            "{position}. {pin_marker}{}",
-            render_content(item, is_selected)
-        ))
-        .width(Length::Fill)
-        .into(),
+        _ => text(format!("{prefix}{}", render_content(item, is_selected)))
+            .width(Length::Fill)
+            .into(),
     };
 
     let category_button =
