@@ -2,6 +2,7 @@ mod app;
 mod instance_lock;
 mod ipc_client;
 mod ipc_worker;
+mod symbols;
 
 use iced_layershell::reexport::{Anchor, KeyboardInteractivity};
 use iced_layershell::settings::{LayerShellSettings, Settings};
