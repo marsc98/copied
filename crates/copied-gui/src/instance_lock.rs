@@ -30,7 +30,12 @@ pub fn acquire_or_signal_existing() -> io::Result<LockOutcome> {
 fn acquire_or_signal_existing_at(path: &Path) -> io::Result<LockOutcome> {
     match std::fs::read_to_string(path) {
         Ok(contents) => {
-            if let Some(pid) = contents.trim().parse::<i32>().ok().filter(|pid| is_alive(*pid)) {
+            if let Some(pid) = contents
+                .trim()
+                .parse::<i32>()
+                .ok()
+                .filter(|pid| is_alive(*pid))
+            {
                 unsafe {
                     libc::kill(pid, libc::SIGUSR1);
                 }

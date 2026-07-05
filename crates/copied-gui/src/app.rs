@@ -8,7 +8,9 @@ use futures::stream::{self, Stream, StreamExt};
 use iced::keyboard::key::Named;
 use iced::keyboard::{Event as KeyboardEvent, Key};
 use iced::widget::image::Handle as ImageHandle;
-use iced::widget::{button, column, container, image, mouse_area, row, scrollable, text, text_input};
+use iced::widget::{
+    button, column, container, image, mouse_area, row, scrollable, text, text_input,
+};
 use iced::{Element, Length, Subscription, Task};
 use iced_layershell::to_layer_message;
 
@@ -214,7 +216,10 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             state.selected = Some(id);
             if let Some(item) = state.items.iter().find(|item| item.id == id) {
                 let category = next_category(item.category);
-                state.send(Command::SetCategory { id, category }, PendingAction::SetCategory);
+                state.send(
+                    Command::SetCategory { id, category },
+                    PendingAction::SetCategory,
+                );
             }
             Task::none()
         }
@@ -328,24 +333,25 @@ fn view_symbols(state: &AppState) -> Element<'_, Message> {
     let groups: Vec<Element<'_, Message>> = symbols::CATALOG
         .iter()
         .filter_map(|group| {
-            let matches: Vec<&'static str> = if needle.is_empty()
-                || group.name.to_lowercase().contains(&needle)
-            {
-                group.symbols.to_vec()
-            } else {
-                group
-                    .symbols
-                    .iter()
-                    .copied()
-                    .filter(|symbol| symbol.to_lowercase().contains(&needle))
-                    .collect()
-            };
+            let matches: Vec<&'static str> =
+                if needle.is_empty() || group.name.to_lowercase().contains(&needle) {
+                    group.symbols.to_vec()
+                } else {
+                    group
+                        .symbols
+                        .iter()
+                        .copied()
+                        .filter(|symbol| symbol.to_lowercase().contains(&needle))
+                        .collect()
+                };
             if matches.is_empty() {
                 return None;
             }
-            let buttons = matches
-                .into_iter()
-                .map(|symbol| button(text(symbol)).on_press(Message::SymbolClicked(symbol)).into());
+            let buttons = matches.into_iter().map(|symbol| {
+                button(text(symbol))
+                    .on_press(Message::SymbolClicked(symbol))
+                    .into()
+            });
             Some(
                 column![text(group.name), row(buttons).spacing(4)]
                     .spacing(4)
@@ -370,21 +376,20 @@ fn render_item<'a>(state: &AppState, item: &'a ItemView) -> Element<'a, Message>
     let pin_marker = if item.pinned { "[pin] " } else { "" };
     let prefix = format!("{marker}{pin_marker}");
 
-    let preview: Element<'_, Message> =
-        match (&item.kind, state.image_cache.get(&item.id)) {
-            (ItemKindView::Image { .. }, Some(handle)) => row![
-                text(prefix),
-                image(handle.clone())
-                    .width(Length::Fixed(48.0))
-                    .height(Length::Fixed(48.0)),
-            ]
-            .spacing(6)
-            .into(),
-            _ => text(format!("{prefix}{}", render_content(item))).into(),
-        };
+    let preview: Element<'_, Message> = match (&item.kind, state.image_cache.get(&item.id)) {
+        (ItemKindView::Image { .. }, Some(handle)) => row![
+            text(prefix),
+            image(handle.clone())
+                .width(Length::Fixed(48.0))
+                .height(Length::Fixed(48.0)),
+        ]
+        .spacing(6)
+        .into(),
+        _ => text(format!("{prefix}{}", render_content(item))).into(),
+    };
 
-    let category_button = button(text(format!("{:?}", item.category)))
-        .on_press(Message::CategoryClicked(item.id));
+    let category_button =
+        button(text(format!("{:?}", item.category))).on_press(Message::CategoryClicked(item.id));
 
     let pin_button = button(if item.pinned { "unpin" } else { "pin" })
         .on_press(Message::TogglePinClicked(item.id));
@@ -426,7 +431,8 @@ pub fn subscription(_state: &AppState) -> Subscription<Message> {
 /// `Subscription::run` só aceita `fn() -> S` sem captura de estado externo.
 fn ipc_stream() -> impl Stream<Item = Message> {
     let (cmd_tx, resp_rx) = ipc_worker::spawn();
-    stream::once(async move { Message::IpcConnected(cmd_tx) }).chain(resp_rx.map(Message::IpcResponse))
+    stream::once(async move { Message::IpcConnected(cmd_tx) })
+        .chain(resp_rx.map(Message::IpcResponse))
 }
 
 fn keyboard_subscription() -> Subscription<Message> {

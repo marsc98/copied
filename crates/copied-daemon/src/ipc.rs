@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use copied_core::{Command, ItemKindView, ItemView, Response};
 pub use copied_core::socket_path;
+use copied_core::{Command, ItemKindView, ItemView, Response};
 
 use crate::clipboard_write;
 use crate::persistence;

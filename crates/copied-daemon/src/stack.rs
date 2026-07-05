@@ -391,7 +391,9 @@ mod tests {
         stack.push_text("a".into());
         let id = stack.items().next().unwrap().id;
 
-        stack.set_category(id, Category::Url).expect("deveria atualizar");
+        stack
+            .set_category(id, Category::Url)
+            .expect("deveria atualizar");
 
         assert_eq!(stack.items().next().unwrap().category, Category::Url);
     }
@@ -410,7 +412,9 @@ mod tests {
         let id = stack.items().next().unwrap().id;
         stack.pin(id).unwrap();
 
-        stack.set_category(id, Category::Codigo).expect("deveria atualizar item pinado");
+        stack
+            .set_category(id, Category::Codigo)
+            .expect("deveria atualizar item pinado");
 
         assert_eq!(stack.pins().next().unwrap().category, Category::Codigo);
     }

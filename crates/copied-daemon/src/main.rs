@@ -71,8 +71,7 @@ fn handle_clipboard_change(
             if !guard.stack.touch(&hash) {
                 match persistence::save_image(cache_dir, &hash, &bytes, &mime) {
                     Ok(path) => {
-                        let mut item =
-                            stack::Item::new_image(path, mime, bytes.len() as u64, hash);
+                        let mut item = stack::Item::new_image(path, mime, bytes.len() as u64, hash);
                         item.category = Category::Imagem;
                         if let Some(evicted) = guard.stack.insert(item) {
                             if let stack::ItemKind::Image { path, .. } = &evicted.kind {

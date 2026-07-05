@@ -12,10 +12,7 @@ pub fn detect(text: &str) -> Category {
 }
 
 fn looks_like_code(text: &str) -> bool {
-    text.contains("fn ")
-        || text.contains("def ")
-        || text.contains('{')
-        || text.contains(';')
+    text.contains("fn ") || text.contains("def ") || text.contains('{') || text.contains(';')
 }
 
 #[cfg(test)]
