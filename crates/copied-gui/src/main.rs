@@ -33,7 +33,7 @@ fn main() -> iced_layershell::Result {
         ..Settings::default()
     };
 
-    iced_layershell::application(AppState::new, "copied-gui", app::update, app::view)
+    iced_layershell::application(AppState::boot, "copied-gui", app::update, app::view)
         .subscription(app::subscription)
         .theme(|_state: &AppState| iced::Theme::Dark)
         .settings(settings)

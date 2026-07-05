@@ -24,6 +24,28 @@ pub enum Tab {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Focus {
+    TabStack,
+    TabSymbols,
+    Search,
+    List,
+}
+
+impl Focus {
+    fn next(self) -> Self {
+        match self {
+            Focus::TabStack => Focus::TabSymbols,
+            Focus::TabSymbols => Focus::Search,
+            Focus::Search => Focus::List,
+            Focus::List => Focus::TabStack,
+        }
+    }
+}
+
+const SEARCH_ID: &str = "copied-gui-search";
+const LIST_ID: &str = "copied-gui-list";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingAction {
     List,
     Copy,
@@ -44,6 +66,7 @@ pub struct AppState {
     pending: VecDeque<PendingAction>,
     image_cache: HashMap<ItemId, ImageHandle>,
     image_requested: HashSet<ItemId>,
+    focus: Focus,
 }
 
 #[to_layer_message]
@@ -58,7 +81,8 @@ pub enum Message {
     CategoryClicked(ItemId),
     MoveSelection(isize),
     SearchChanged(String),
-    CopySelected,
+    EnterPressed,
+    FocusNext,
     DeleteSelected,
     TogglePinSelected,
     TabSelected(Tab),
@@ -79,7 +103,12 @@ impl AppState {
             pending: VecDeque::new(),
             image_cache: HashMap::new(),
             image_requested: HashSet::new(),
+            focus: Focus::Search,
         }
+    }
+
+    pub fn boot() -> (Self, Task<Message>) {
+        (Self::new(), iced::widget::operation::focus(SEARCH_ID))
     }
 
     fn send(&mut self, cmd: Command, action: PendingAction) {
@@ -204,6 +233,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
         }
         Message::ItemClicked(id) => {
             state.selected = Some(id);
+            state.focus = Focus::List;
             state.send(Command::CopyToClipboard { id }, PendingAction::Copy);
             Task::none()
         }
@@ -225,18 +255,35 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
         }
         Message::MoveSelection(delta) => {
             state.move_selection(delta);
-            Task::none()
+            scroll_to_selection(state)
         }
         Message::SearchChanged(value) => {
             state.search = value;
             state.clamp_selection();
             Task::none()
         }
-        Message::CopySelected => {
-            if let Some(id) = state.selected {
-                state.send(Command::CopyToClipboard { id }, PendingAction::Copy);
+        Message::EnterPressed => match state.focus {
+            Focus::TabStack => {
+                state.active_tab = Tab::Stack;
+                Task::none()
             }
-            Task::none()
+            Focus::TabSymbols => {
+                state.active_tab = Tab::Symbols;
+                Task::none()
+            }
+            Focus::Search | Focus::List => {
+                if let Some(id) = state.selected {
+                    state.send(Command::CopyToClipboard { id }, PendingAction::Copy);
+                }
+                Task::none()
+            }
+        },
+        Message::FocusNext => {
+            state.focus = state.focus.next();
+            match state.focus {
+                Focus::Search => iced::widget::operation::focus(SEARCH_ID),
+                _ => iced::widget::operation::focus(iced::widget::Id::unique()),
+            }
         }
         Message::DeleteSelected => {
             if let Some(id) = state.selected {
@@ -252,6 +299,10 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
         }
         Message::TabSelected(tab) => {
             state.active_tab = tab;
+            state.focus = match tab {
+                Tab::Stack => Focus::TabStack,
+                Tab::Symbols => Focus::TabSymbols,
+            };
             Task::none()
         }
         Message::SymbolClicked(symbol) => {
@@ -280,6 +331,27 @@ fn next_category(current: Category) -> Category {
     }
 }
 
+fn scroll_to_selection(state: &AppState) -> Task<Message> {
+    let visible = state.filtered_items();
+    let Some(selected) = state.selected else {
+        return Task::none();
+    };
+    let Some(index) = visible.iter().position(|item| item.id == selected) else {
+        return Task::none();
+    };
+    if visible.len() <= 1 {
+        return Task::none();
+    }
+    let fraction = index as f32 / (visible.len() - 1) as f32;
+    iced::widget::operation::snap_to(
+        LIST_ID,
+        iced::widget::operation::RelativeOffset {
+            x: 0.0,
+            y: fraction,
+        },
+    )
+}
+
 fn toggle_pin(state: &mut AppState, id: ItemId) {
     let Some(item) = state.items.iter().find(|item| item.id == id) else {
         return;
@@ -299,20 +371,23 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
             .style(move |theme, status| tab_button_style(
                 theme,
                 status,
-                state.active_tab == Tab::Stack
+                state.active_tab == Tab::Stack,
+                state.focus == Focus::TabStack
             )),
         button("Símbolos")
             .on_press(Message::TabSelected(Tab::Symbols))
             .style(move |theme, status| tab_button_style(
                 theme,
                 status,
-                state.active_tab == Tab::Symbols
+                state.active_tab == Tab::Symbols,
+                state.focus == Focus::TabSymbols
             )),
     ]
     .spacing(6);
 
     let search_box = text_input("Buscar…", &state.search)
         .on_input(Message::SearchChanged)
+        .id(SEARCH_ID)
         .width(Length::Fill);
 
     let body = match state.active_tab {
@@ -322,19 +397,40 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
 
     let status = text(state.status.clone().unwrap_or_default());
 
-    column![tab_bar, search_box, body, status]
+    let content = column![tab_bar, search_box, body, status]
         .width(Length::Fill)
         .spacing(10)
-        .padding(10)
+        .padding(10);
+
+    container(content)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(window_style)
         .into()
 }
 
-fn tab_button_style(theme: &iced::Theme, status: button::Status, active: bool) -> button::Style {
-    if active {
+fn window_style(theme: &iced::Theme) -> container::Style {
+    container::Style {
+        border: iced::border::color(theme.extended_palette().background.strong.color).width(1.0),
+        ..container::Style::default()
+    }
+}
+
+fn tab_button_style(
+    theme: &iced::Theme,
+    status: button::Status,
+    active: bool,
+    focused: bool,
+) -> button::Style {
+    let mut style = if active {
         button::primary(theme, status)
     } else {
         button::secondary(theme, status)
+    };
+    if focused {
+        style.border = iced::border::color(theme.extended_palette().primary.base.color).width(2.0);
     }
+    style
 }
 
 fn view_stack(state: &AppState) -> Element<'_, Message> {
@@ -345,8 +441,13 @@ fn view_stack(state: &AppState) -> Element<'_, Message> {
     } else if filtered.is_empty() {
         text("Nenhum resultado pra essa busca.").into()
     } else {
-        let rows = filtered.into_iter().map(|item| render_item(state, item));
-        scrollable(column(rows).width(Length::Fill).spacing(4)).into()
+        let rows = filtered
+            .into_iter()
+            .enumerate()
+            .map(|(index, item)| render_item(state, item, index + 1));
+        scrollable(column(rows).width(Length::Fill).spacing(4))
+            .id(LIST_ID)
+            .into()
     }
 }
 
@@ -389,23 +490,26 @@ fn view_symbols(state: &AppState) -> Element<'_, Message> {
     }
 }
 
-fn render_item<'a>(state: &AppState, item: &'a ItemView) -> Element<'a, Message> {
+fn render_item<'a>(state: &AppState, item: &'a ItemView, position: usize) -> Element<'a, Message> {
     let is_selected = state.selected == Some(item.id);
     let is_hovered = state.hovered == Some(item.id);
     let pin_marker = if item.pinned { "[pin] " } else { "" };
 
     let preview: Element<'_, Message> = match (&item.kind, state.image_cache.get(&item.id)) {
         (ItemKindView::Image { .. }, Some(handle)) => row![
-            text(pin_marker),
+            text(format!("{position}. {pin_marker}")),
             image(handle.clone())
                 .width(Length::Fixed(48.0))
                 .height(Length::Fixed(48.0)),
         ]
         .spacing(6)
         .into(),
-        _ => text(format!("{pin_marker}{}", render_content(item, is_selected)))
-            .width(Length::Fill)
-            .into(),
+        _ => text(format!(
+            "{position}. {pin_marker}{}",
+            render_content(item, is_selected)
+        ))
+        .width(Length::Fill)
+        .into(),
     };
 
     let category_button =
@@ -423,10 +527,11 @@ fn render_item<'a>(state: &AppState, item: &'a ItemView) -> Element<'a, Message>
         .width(Length::Fill)
         .align_y(iced::Alignment::Center);
 
+    let is_focused = is_selected && state.focus == Focus::List;
     let item_container = container(content)
         .width(Length::Fill)
         .padding(8)
-        .style(move |theme: &iced::Theme| item_style(theme, is_selected, is_hovered));
+        .style(move |theme: &iced::Theme| item_style(theme, is_selected, is_hovered, is_focused));
 
     mouse_area(item_container)
         .on_press(Message::ItemClicked(item.id))
@@ -435,7 +540,12 @@ fn render_item<'a>(state: &AppState, item: &'a ItemView) -> Element<'a, Message>
         .into()
 }
 
-fn item_style(theme: &iced::Theme, selected: bool, hovered: bool) -> container::Style {
+fn item_style(
+    theme: &iced::Theme,
+    selected: bool,
+    hovered: bool,
+    focused: bool,
+) -> container::Style {
     let palette = theme.extended_palette();
     let background = if selected {
         Some(palette.primary.weak.color.into())
@@ -444,8 +554,14 @@ fn item_style(theme: &iced::Theme, selected: bool, hovered: bool) -> container::
     } else {
         None
     };
+    let border = if focused {
+        iced::border::color(palette.primary.base.color).width(2.0)
+    } else {
+        iced::Border::default()
+    };
     container::Style {
         background,
+        border,
         ..container::Style::default()
     }
 }
@@ -493,7 +609,8 @@ fn keyboard_subscription() -> Subscription<Message> {
         match key {
             Key::Named(Named::ArrowUp) => Some(Message::MoveSelection(-1)),
             Key::Named(Named::ArrowDown) => Some(Message::MoveSelection(1)),
-            Key::Named(Named::Enter) => Some(Message::CopySelected),
+            Key::Named(Named::Enter) => Some(Message::EnterPressed),
+            Key::Named(Named::Tab) => Some(Message::FocusNext),
             Key::Named(Named::Delete) => Some(Message::DeleteSelected),
             Key::Named(Named::F2) => Some(Message::TogglePinSelected),
             Key::Named(Named::Escape) => Some(Message::CloseRequested),
