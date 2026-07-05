@@ -23,7 +23,7 @@ pub enum Tab {
     Symbols,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Focus {
     TabStack,
     TabSymbols,
@@ -581,8 +581,11 @@ fn render_content(item: &ItemView, full: bool) -> String {
     }
 }
 
-pub fn subscription(_state: &AppState) -> Subscription<Message> {
-    Subscription::batch([Subscription::run(ipc_stream), keyboard_subscription()])
+pub fn subscription(state: &AppState) -> Subscription<Message> {
+    Subscription::batch([
+        Subscription::run(ipc_stream),
+        keyboard_subscription(state.focus),
+    ])
 }
 
 /// Conecta ao `ipc_worker` uma vez que a subscription começa a rodar; o
@@ -595,20 +598,32 @@ fn ipc_stream() -> impl Stream<Item = Message> {
         .chain(resp_rx.map(Message::IpcResponse))
 }
 
-fn keyboard_subscription() -> Subscription<Message> {
-    iced::keyboard::listen().filter_map(|event| {
-        let KeyboardEvent::KeyPressed { key, .. } = event else {
-            return None;
-        };
-        match key {
-            Key::Named(Named::ArrowUp) => Some(Message::MoveSelection(-1)),
-            Key::Named(Named::ArrowDown) => Some(Message::MoveSelection(1)),
-            Key::Named(Named::Enter) => Some(Message::EnterPressed),
-            Key::Named(Named::Tab) => Some(Message::FocusNext),
-            Key::Named(Named::Delete) => Some(Message::DeleteSelected),
-            Key::Named(Named::F2) => Some(Message::TogglePinSelected),
-            Key::Named(Named::Escape) => Some(Message::CloseRequested),
-            _ => None,
-        }
-    })
+fn keyboard_subscription(focus: Focus) -> Subscription<Message> {
+    iced::keyboard::listen()
+        .with(focus)
+        .filter_map(|(focus, event)| {
+            let KeyboardEvent::KeyPressed { key, .. } = event else {
+                return None;
+            };
+            match key {
+                Key::Named(Named::ArrowUp) => Some(Message::MoveSelection(-1)),
+                Key::Named(Named::ArrowDown) => Some(Message::MoveSelection(1)),
+                Key::Named(Named::Enter) => Some(Message::EnterPressed),
+                Key::Named(Named::Tab) => Some(Message::FocusNext),
+                Key::Named(Named::Delete) => Some(Message::DeleteSelected),
+                Key::Named(Named::F2) => Some(Message::TogglePinSelected),
+                Key::Named(Named::Escape) => Some(Message::CloseRequested),
+                Key::Character(c)
+                    if focus == Focus::List && c.as_str().eq_ignore_ascii_case("p") =>
+                {
+                    Some(Message::TogglePinSelected)
+                }
+                Key::Character(c)
+                    if focus == Focus::List && c.as_str().eq_ignore_ascii_case("d") =>
+                {
+                    Some(Message::DeleteSelected)
+                }
+                _ => None,
+            }
+        })
 }
