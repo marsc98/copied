@@ -66,6 +66,7 @@ pub struct AppState {
     search: String,
     active_tab: Tab,
     selected: Option<ItemId>,
+    selected_symbol: Option<&'static str>,
     hovered: Option<ItemId>,
     status: Option<String>,
     ipc_tx: Option<Sender<Command>>,
@@ -86,6 +87,7 @@ pub enum Message {
     TogglePinClicked(ItemId),
     DeleteClicked(ItemId),
     MoveSelection(isize),
+    MoveSymbolIndex(isize),
     SearchChanged(String),
     EnterPressed,
     FocusNext,
@@ -103,6 +105,7 @@ impl AppState {
             search: String::new(),
             active_tab: Tab::Stack,
             selected: None,
+            selected_symbol: None,
             hovered: None,
             status: None,
             ipc_tx: None,
@@ -178,6 +181,60 @@ impl AppState {
         let next = (current + delta).rem_euclid(len) as usize;
         self.selected = Some(visible[next].id);
     }
+
+    fn clamp_symbol_selection(&mut self) {
+        let groups = visible_symbol_groups(self);
+        let still_visible = self
+            .selected_symbol
+            .is_some_and(|symbol| groups.iter().any(|(_, symbols)| symbols.contains(&symbol)));
+        if !still_visible {
+            self.selected_symbol = groups
+                .first()
+                .and_then(|(_, symbols)| symbols.first().copied());
+        }
+    }
+
+    fn move_symbol_group(&mut self, delta: isize) {
+        let groups = visible_symbol_groups(self);
+        if groups.is_empty() {
+            self.selected_symbol = None;
+            return;
+        }
+        let current_group = self
+            .selected_symbol
+            .and_then(|symbol| {
+                groups
+                    .iter()
+                    .position(|(_, symbols)| symbols.contains(&symbol))
+            })
+            .unwrap_or(0) as isize;
+        let len = groups.len() as isize;
+        let next = (current_group + delta).rem_euclid(len) as usize;
+        self.selected_symbol = groups[next].1.first().copied();
+    }
+
+    fn move_symbol_index(&mut self, delta: isize) {
+        let groups = visible_symbol_groups(self);
+        if groups.is_empty() {
+            self.selected_symbol = None;
+            return;
+        }
+        let position = self.selected_symbol.and_then(|symbol| {
+            groups.iter().find_map(|(_, symbols)| {
+                symbols
+                    .iter()
+                    .position(|s| *s == symbol)
+                    .map(|index| (symbols, index))
+            })
+        });
+        let Some((symbols, index)) = position else {
+            self.selected_symbol = groups[0].1.first().copied();
+            return;
+        };
+        let len = symbols.len() as isize;
+        let next = (index as isize + delta).rem_euclid(len) as usize;
+        self.selected_symbol = Some(symbols[next]);
+    }
 }
 
 impl Default for AppState {
@@ -251,13 +308,26 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             state.send(Command::Delete { id }, PendingAction::Delete);
             Task::none()
         }
-        Message::MoveSelection(delta) => {
-            state.move_selection(delta);
-            scroll_to_selection(state)
+        Message::MoveSelection(delta) => match state.active_tab {
+            Tab::Stack => {
+                state.move_selection(delta);
+                scroll_to_selection(state)
+            }
+            Tab::Symbols => {
+                state.move_symbol_group(delta);
+                Task::none()
+            }
+        },
+        Message::MoveSymbolIndex(delta) => {
+            if state.active_tab == Tab::Symbols {
+                state.move_symbol_index(delta);
+            }
+            Task::none()
         }
         Message::SearchChanged(value) => {
             state.search = value;
             state.clamp_selection();
+            state.clamp_symbol_selection();
             Task::none()
         }
         Message::EnterPressed => match state.focus {
@@ -269,12 +339,22 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 state.active_tab = Tab::Symbols;
                 Task::none()
             }
-            Focus::Search | Focus::List => {
-                if let Some(id) = state.selected {
-                    state.send(Command::CopyToClipboard { id }, PendingAction::Copy);
+            Focus::Search | Focus::List => match state.active_tab {
+                Tab::Stack => {
+                    if let Some(id) = state.selected {
+                        state.send(Command::CopyToClipboard { id }, PendingAction::Copy);
+                    }
+                    Task::none()
                 }
-                Task::none()
-            }
+                Tab::Symbols => {
+                    if let Some(symbol) = state.selected_symbol {
+                        let _ = copy_symbol_to_clipboard(symbol);
+                        iced::exit()
+                    } else {
+                        Task::none()
+                    }
+                }
+            },
         },
         Message::FocusNext => {
             state.focus = state.focus.next();
@@ -301,6 +381,9 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 Tab::Stack => Focus::TabStack,
                 Tab::Symbols => Focus::TabSymbols,
             };
+            if tab == Tab::Symbols {
+                state.clamp_symbol_selection();
+            }
             Task::none()
         }
         Message::SymbolClicked(symbol) => {
@@ -428,6 +511,20 @@ fn rounded_primary(theme: &iced::Theme, status: button::Status) -> button::Style
     style
 }
 
+fn symbol_button_style(
+    theme: &iced::Theme,
+    status: button::Status,
+    selected: bool,
+) -> button::Style {
+    let mut style = if selected {
+        button::primary(theme, status)
+    } else {
+        button::secondary(theme, status)
+    };
+    style.border = style.border.rounded(BUTTON_RADIUS);
+    style
+}
+
 fn view_stack(state: &AppState) -> Element<'_, Message> {
     let filtered = state.filtered_items();
 
@@ -459,9 +556,9 @@ fn view_stack(state: &AppState) -> Element<'_, Message> {
     }
 }
 
-fn view_symbols(state: &AppState) -> Element<'_, Message> {
+fn visible_symbol_groups(state: &AppState) -> Vec<(&'static str, Vec<&'static str>)> {
     let needle = state.search.trim().to_lowercase();
-    let groups: Vec<Element<'_, Message>> = symbols::CATALOG
+    symbols::CATALOG
         .iter()
         .filter_map(|group| {
             let matches: Vec<&'static str> =
@@ -476,26 +573,33 @@ fn view_symbols(state: &AppState) -> Element<'_, Message> {
                         .collect()
                 };
             if matches.is_empty() {
-                return None;
+                None
+            } else {
+                Some((group.name, matches))
             }
-            let buttons = matches.into_iter().map(|symbol| {
-                button(text(symbol))
-                    .on_press(Message::SymbolClicked(symbol))
-                    .style(rounded_primary)
-                    .into()
-            });
-            Some(
-                column![text(group.name), row(buttons).spacing(4)]
-                    .spacing(4)
-                    .into(),
-            )
         })
-        .collect();
+        .collect()
+}
+
+fn view_symbols(state: &AppState) -> Element<'_, Message> {
+    let groups = visible_symbol_groups(state);
 
     if groups.is_empty() {
         text("Nenhum resultado pra essa busca.").into()
     } else {
-        scrollable(column(groups).spacing(10).width(Length::Fill)).into()
+        let sections = groups.into_iter().map(|(name, symbols)| {
+            let buttons = symbols.into_iter().map(|symbol| {
+                let selected = state.selected_symbol == Some(symbol);
+                button(text(symbol))
+                    .on_press(Message::SymbolClicked(symbol))
+                    .style(move |theme, status| symbol_button_style(theme, status, selected))
+                    .into()
+            });
+            column![text(name), row(buttons).spacing(4)]
+                .spacing(4)
+                .into()
+        });
+        scrollable(column(sections).spacing(10).width(Length::Fill)).into()
     }
 }
 
@@ -637,6 +741,8 @@ fn keyboard_subscription(focus: Focus) -> Subscription<Message> {
             match key {
                 Key::Named(Named::ArrowUp) => Some(Message::MoveSelection(-1)),
                 Key::Named(Named::ArrowDown) => Some(Message::MoveSelection(1)),
+                Key::Named(Named::ArrowLeft) => Some(Message::MoveSymbolIndex(-1)),
+                Key::Named(Named::ArrowRight) => Some(Message::MoveSymbolIndex(1)),
                 Key::Named(Named::Enter) => Some(Message::EnterPressed),
                 Key::Named(Named::Tab) => Some(Message::FocusNext),
                 Key::Named(Named::Delete) => Some(Message::DeleteSelected),
