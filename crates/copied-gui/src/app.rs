@@ -6,6 +6,7 @@ use iced::keyboard::key::Named;
 use iced::keyboard::{Event as KeyboardEvent, Key};
 use iced::widget::{button, column, container, mouse_area, row, scrollable, text, text_input};
 use iced::{Element, Length, Subscription, Task};
+use iced_layershell::to_layer_message;
 
 use crate::ipc_worker;
 
@@ -23,11 +24,11 @@ pub struct AppState {
     selected: Option<ItemId>,
     hovered: Option<ItemId>,
     status: Option<String>,
-    should_exit: bool,
     ipc_tx: Option<Sender<Command>>,
     pending: Option<PendingAction>,
 }
 
+#[to_layer_message]
 #[derive(Debug, Clone)]
 pub enum Message {
     IpcConnected(Sender<Command>),
@@ -52,14 +53,9 @@ impl AppState {
             selected: None,
             hovered: None,
             status: None,
-            should_exit: false,
             ipc_tx: None,
             pending: None,
         }
-    }
-
-    pub fn should_exit(&self) -> bool {
-        self.should_exit
     }
 
     fn send(&mut self, cmd: Command, action: PendingAction) {
@@ -121,6 +117,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             let _ = tx.send(Command::List);
             state.pending = Some(PendingAction::List);
             state.ipc_tx = Some(tx);
+            Task::none()
         }
         Message::IpcResponse(response) => {
             let action = state.pending.take();
@@ -128,52 +125,72 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 Response::Items(items) => {
                     state.items = items;
                     state.clamp_selection();
+                    Task::none()
                 }
                 Response::Ack => match action {
-                    Some(PendingAction::Copy) => state.should_exit = true,
+                    Some(PendingAction::Copy) => iced::exit(),
                     Some(PendingAction::Delete) | Some(PendingAction::TogglePin) => {
                         state.status = None;
                         state.send(Command::List, PendingAction::List);
+                        Task::none()
                     }
-                    _ => {}
+                    _ => Task::none(),
                 },
-                Response::Error { message } => state.status = Some(message),
-                Response::ImageBytes { .. } => {}
+                Response::Error { message } => {
+                    state.status = Some(message);
+                    Task::none()
+                }
+                Response::ImageBytes { .. } => Task::none(),
             }
         }
-        Message::ItemHovered(id) => state.hovered = Some(id),
-        Message::ItemUnhovered => state.hovered = None,
+        Message::ItemHovered(id) => {
+            state.hovered = Some(id);
+            Task::none()
+        }
+        Message::ItemUnhovered => {
+            state.hovered = None;
+            Task::none()
+        }
         Message::ItemClicked(id) => {
             state.selected = Some(id);
             state.send(Command::CopyToClipboard { id }, PendingAction::Copy);
+            Task::none()
         }
         Message::TogglePinClicked(id) => {
             state.selected = Some(id);
             toggle_pin(state, id);
+            Task::none()
         }
-        Message::MoveSelection(delta) => state.move_selection(delta),
+        Message::MoveSelection(delta) => {
+            state.move_selection(delta);
+            Task::none()
+        }
         Message::SearchChanged(value) => {
             state.search = value;
             state.clamp_selection();
+            Task::none()
         }
         Message::CopySelected => {
             if let Some(id) = state.selected {
                 state.send(Command::CopyToClipboard { id }, PendingAction::Copy);
             }
+            Task::none()
         }
         Message::DeleteSelected => {
             if let Some(id) = state.selected {
                 state.send(Command::Delete { id }, PendingAction::Delete);
             }
+            Task::none()
         }
         Message::TogglePinSelected => {
             if let Some(id) = state.selected {
                 toggle_pin(state, id);
             }
+            Task::none()
         }
-        Message::CloseRequested => state.should_exit = true,
+        Message::CloseRequested => iced::exit(),
+        _ => Task::none(),
     }
-    Task::none()
 }
 
 fn toggle_pin(state: &mut AppState, id: ItemId) {

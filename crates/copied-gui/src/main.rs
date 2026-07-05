@@ -3,23 +3,37 @@ mod instance_lock;
 mod ipc_client;
 mod ipc_worker;
 
-use copied_core::Command;
-use ipc_client::IpcClient;
+use iced_layershell::reexport::{Anchor, KeyboardInteractivity};
+use iced_layershell::settings::{LayerShellSettings, Settings};
 
-fn main() {
-    let mut client = match IpcClient::connect() {
-        Ok(client) => client,
+use app::AppState;
+use instance_lock::LockOutcome;
+
+fn main() -> iced_layershell::Result {
+    // Mantido no escopo de `main` até o fim: remove o lock file no `Drop`
+    // quando `run()` retornar (fechamento normal via `iced::exit()`).
+    let _guard = match instance_lock::acquire_or_signal_existing() {
+        Ok(LockOutcome::SignaledExisting) => return Ok(()),
+        Ok(LockOutcome::Acquired(guard)) => Some(guard),
         Err(err) => {
-            eprintln!("copied-gui: falha conectando ao daemon: {err}");
-            std::process::exit(1);
+            eprintln!("copied-gui: falha no lock de instância, seguindo sem ele: {err}");
+            None
         }
     };
 
-    match client.send(&Command::List) {
-        Ok(response) => println!("{response:?}"),
-        Err(err) => {
-            eprintln!("copied-gui: falha na comunicação com o daemon: {err}");
-            std::process::exit(1);
-        }
-    }
+    let settings = Settings {
+        layer_settings: LayerShellSettings {
+            anchor: Anchor::Top | Anchor::Right,
+            exclusive_zone: 0,
+            size: Some((420, 480)),
+            keyboard_interactivity: KeyboardInteractivity::OnDemand,
+            ..LayerShellSettings::default()
+        },
+        ..Settings::default()
+    };
+
+    iced_layershell::application(AppState::new, "copied-gui", app::update, app::view)
+        .subscription(app::subscription)
+        .settings(settings)
+        .run()
 }
