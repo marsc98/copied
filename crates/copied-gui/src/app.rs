@@ -45,6 +45,11 @@ impl Focus {
 const SEARCH_ID: &str = "copied-gui-search";
 const LIST_ID: &str = "copied-gui-list";
 
+const BOLD_FONT: iced::Font = iced::Font {
+    weight: iced::font::Weight::Bold,
+    ..iced::Font::DEFAULT
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingAction {
     List,
@@ -491,20 +496,31 @@ fn render_item<'a>(
 ) -> Element<'a, Message> {
     let is_selected = state.selected == Some(item.id);
     let is_hovered = state.hovered == Some(item.id);
-    let prefix = position.map(|n| format!("{n} | ")).unwrap_or_default();
+    let prefix = position.map(|n| text(format!("{n} | ")).font(BOLD_FONT));
 
     let preview: Element<'_, Message> = match (&item.kind, state.image_cache.get(&item.id)) {
-        (ItemKindView::Image { .. }, Some(handle)) => row![
-            text(prefix),
-            image(handle.clone())
-                .width(Length::Fixed(48.0))
-                .height(Length::Fixed(48.0)),
-        ]
-        .spacing(6)
-        .into(),
-        _ => text(format!("{prefix}{}", render_content(item, is_selected)))
-            .width(Length::Fill)
-            .into(),
+        (ItemKindView::Image { .. }, Some(handle)) => {
+            let mut contents = row![].spacing(6);
+            if let Some(prefix) = prefix {
+                contents = contents.push(prefix);
+            }
+            contents
+                .push(
+                    image(handle.clone())
+                        .width(Length::Fixed(48.0))
+                        .height(Length::Fixed(48.0)),
+                )
+                .into()
+        }
+        _ => {
+            let mut contents = row![].width(Length::Fill);
+            if let Some(prefix) = prefix {
+                contents = contents.push(prefix);
+            }
+            contents
+                .push(text(render_content(item, is_selected)))
+                .into()
+        }
     };
 
     let pin_button = button(if item.pinned { "unpin" } else { "pin" })
