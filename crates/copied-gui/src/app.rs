@@ -3,7 +3,7 @@ use std::sync::mpsc::Sender;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
-use copied_core::{Command, ItemId, ItemKindView, ItemView, Response};
+use copied_core::{Category, Command, ItemId, ItemKindView, ItemView, Response};
 use futures::stream::{self, Stream, StreamExt};
 use iced::keyboard::key::Named;
 use iced::keyboard::{Event as KeyboardEvent, Key};
@@ -20,6 +20,7 @@ enum PendingAction {
     Copy,
     Delete,
     TogglePin,
+    SetCategory,
     FetchImage(ItemId),
 }
 
@@ -44,6 +45,7 @@ pub enum Message {
     ItemUnhovered,
     ItemClicked(ItemId),
     TogglePinClicked(ItemId),
+    CategoryClicked(ItemId),
     MoveSelection(isize),
     SearchChanged(String),
     CopySelected,
@@ -154,7 +156,9 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 Response::Ack => match action {
                     Some(PendingAction::Copy) => iced::exit(),
-                    Some(PendingAction::Delete) | Some(PendingAction::TogglePin) => {
+                    Some(PendingAction::Delete)
+                    | Some(PendingAction::TogglePin)
+                    | Some(PendingAction::SetCategory) => {
                         state.status = None;
                         state.send(Command::List, PendingAction::List);
                         Task::none()
@@ -195,6 +199,14 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             toggle_pin(state, id);
             Task::none()
         }
+        Message::CategoryClicked(id) => {
+            state.selected = Some(id);
+            if let Some(item) = state.items.iter().find(|item| item.id == id) {
+                let category = next_category(item.category);
+                state.send(Command::SetCategory { id, category }, PendingAction::SetCategory);
+            }
+            Task::none()
+        }
         Message::MoveSelection(delta) => {
             state.move_selection(delta);
             Task::none()
@@ -224,6 +236,16 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
         }
         Message::CloseRequested => iced::exit(),
         _ => Task::none(),
+    }
+}
+
+fn next_category(current: Category) -> Category {
+    match current {
+        Category::Texto => Category::Url,
+        Category::Url => Category::Codigo,
+        Category::Codigo => Category::Imagem,
+        Category::Imagem => Category::Outro,
+        Category::Outro => Category::Texto,
     }
 }
 
@@ -282,10 +304,13 @@ fn render_item<'a>(state: &AppState, item: &'a ItemView) -> Element<'a, Message>
             _ => text(format!("{prefix}{}", render_content(item))).into(),
         };
 
+    let category_button = button(text(format!("{:?}", item.category)))
+        .on_press(Message::CategoryClicked(item.id));
+
     let pin_button = button(if item.pinned { "unpin" } else { "pin" })
         .on_press(Message::TogglePinClicked(item.id));
 
-    let content = row![preview, pin_button].width(Length::Fill);
+    let content = row![preview, category_button, pin_button].width(Length::Fill);
 
     mouse_area(container(content).width(Length::Fill))
         .on_press(Message::ItemClicked(item.id))
