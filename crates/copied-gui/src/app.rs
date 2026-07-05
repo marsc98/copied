@@ -13,6 +13,13 @@ use iced::{Element, Length, Subscription, Task};
 use iced_layershell::to_layer_message;
 
 use crate::ipc_worker;
+use crate::symbols;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tab {
+    Stack,
+    Symbols,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingAction {
@@ -27,6 +34,7 @@ enum PendingAction {
 pub struct AppState {
     items: Vec<ItemView>,
     search: String,
+    active_tab: Tab,
     selected: Option<ItemId>,
     hovered: Option<ItemId>,
     status: Option<String>,
@@ -51,6 +59,8 @@ pub enum Message {
     CopySelected,
     DeleteSelected,
     TogglePinSelected,
+    TabSelected(Tab),
+    SymbolClicked(&'static str),
     CloseRequested,
 }
 
@@ -59,6 +69,7 @@ impl AppState {
         Self {
             items: Vec::new(),
             search: String::new(),
+            active_tab: Tab::Stack,
             selected: None,
             hovered: None,
             status: None,
@@ -234,9 +245,24 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             }
             Task::none()
         }
+        Message::TabSelected(tab) => {
+            state.active_tab = tab;
+            Task::none()
+        }
+        Message::SymbolClicked(symbol) => {
+            let _ = copy_symbol_to_clipboard(symbol);
+            iced::exit()
+        }
         Message::CloseRequested => iced::exit(),
         _ => Task::none(),
     }
+}
+
+fn copy_symbol_to_clipboard(symbol: &str) -> Result<(), wl_clipboard_rs::copy::Error> {
+    use wl_clipboard_rs::copy::{self, MimeType, Options, Source};
+    let options = Options::default();
+    let source = Source::Bytes(symbol.as_bytes().to_vec().into_boxed_slice());
+    copy::copy(options, source, MimeType::Text)
 }
 
 fn next_category(current: Category) -> Category {
@@ -262,24 +288,77 @@ fn toggle_pin(state: &mut AppState, id: ItemId) {
 }
 
 pub fn view(state: &AppState) -> Element<'_, Message> {
+    let tab_bar = row![
+        button("Stack").on_press(Message::TabSelected(Tab::Stack)),
+        button("Símbolos").on_press(Message::TabSelected(Tab::Symbols)),
+    ]
+    .spacing(6);
+
     let search_box = text_input("Buscar…", &state.search)
         .on_input(Message::SearchChanged)
         .width(Length::Fill);
 
+    let body = match state.active_tab {
+        Tab::Stack => view_stack(state),
+        Tab::Symbols => view_symbols(state),
+    };
+
+    let status = text(state.status.clone().unwrap_or_default());
+
+    column![tab_bar, search_box, body, status]
+        .width(Length::Fill)
+        .into()
+}
+
+fn view_stack(state: &AppState) -> Element<'_, Message> {
     let filtered = state.filtered_items();
 
-    let body: Element<'_, Message> = if state.items.is_empty() {
+    if state.items.is_empty() {
         text("Pilha vazia — copie algo pra começar.").into()
     } else if filtered.is_empty() {
         text("Nenhum resultado pra essa busca.").into()
     } else {
         let rows = filtered.into_iter().map(|item| render_item(state, item));
         scrollable(column(rows).width(Length::Fill)).into()
-    };
+    }
+}
 
-    let status = text(state.status.clone().unwrap_or_default());
+fn view_symbols(state: &AppState) -> Element<'_, Message> {
+    let needle = state.search.trim().to_lowercase();
+    let groups: Vec<Element<'_, Message>> = symbols::CATALOG
+        .iter()
+        .filter_map(|group| {
+            let matches: Vec<&'static str> = if needle.is_empty()
+                || group.name.to_lowercase().contains(&needle)
+            {
+                group.symbols.to_vec()
+            } else {
+                group
+                    .symbols
+                    .iter()
+                    .copied()
+                    .filter(|symbol| symbol.to_lowercase().contains(&needle))
+                    .collect()
+            };
+            if matches.is_empty() {
+                return None;
+            }
+            let buttons = matches
+                .into_iter()
+                .map(|symbol| button(text(symbol)).on_press(Message::SymbolClicked(symbol)).into());
+            Some(
+                column![text(group.name), row(buttons).spacing(4)]
+                    .spacing(4)
+                    .into(),
+            )
+        })
+        .collect();
 
-    column![search_box, body, status].width(Length::Fill).into()
+    if groups.is_empty() {
+        text("Nenhum resultado pra essa busca.").into()
+    } else {
+        scrollable(column(groups).spacing(10).width(Length::Fill)).into()
+    }
 }
 
 fn render_item<'a>(state: &AppState, item: &'a ItemView) -> Element<'a, Message> {
