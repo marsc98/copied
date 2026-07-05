@@ -35,7 +35,15 @@ fn main() -> iced_layershell::Result {
 
     iced_layershell::application(AppState::boot, "copied-gui", app::update, app::view)
         .subscription(app::subscription)
-        .theme(|_state: &AppState| iced::Theme::Dark)
+        .theme(|_state: &AppState| theme())
         .settings(settings)
         .run()
+}
+
+fn theme() -> iced::Theme {
+    let palette = iced::theme::Palette {
+        primary: iced::Color::from_rgb8(0x20, 0x7f, 0x99),
+        ..iced::theme::Palette::DARK
+    };
+    iced::Theme::custom("copied-gui-dark".to_string(), palette)
 }

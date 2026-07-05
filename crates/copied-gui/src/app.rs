@@ -50,6 +50,8 @@ const BOLD_FONT: iced::Font = iced::Font {
     ..iced::Font::DEFAULT
 };
 
+const BUTTON_RADIUS: f32 = 8.0;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingAction {
     List,
@@ -416,6 +418,13 @@ fn tab_button_style(
     if focused {
         style.border = iced::border::color(theme.extended_palette().primary.base.color).width(2.0);
     }
+    style.border = style.border.rounded(BUTTON_RADIUS);
+    style
+}
+
+fn rounded_primary(theme: &iced::Theme, status: button::Status) -> button::Style {
+    let mut style = button::primary(theme, status);
+    style.border = style.border.rounded(BUTTON_RADIUS);
     style
 }
 
@@ -472,6 +481,7 @@ fn view_symbols(state: &AppState) -> Element<'_, Message> {
             let buttons = matches.into_iter().map(|symbol| {
                 button(text(symbol))
                     .on_press(Message::SymbolClicked(symbol))
+                    .style(rounded_primary)
                     .into()
             });
             Some(
@@ -523,14 +533,17 @@ fn render_item<'a>(
         }
     };
 
-    let pin_button = button(if item.pinned { "unpin" } else { "pin" })
-        .on_press(Message::TogglePinClicked(item.id));
+    let pin_button = button(if item.pinned { "Unpin (p)" } else { "Pin (p)" })
+        .on_press(Message::TogglePinClicked(item.id))
+        .style(rounded_primary);
 
-    let delete_button = button("Delete").on_press(Message::DeleteClicked(item.id));
+    let delete_button = button("Delete (d)")
+        .on_press(Message::DeleteClicked(item.id))
+        .style(rounded_primary);
 
     let actions = row![pin_button, delete_button]
         .spacing(6)
-        .width(Length::Fixed(150.0));
+        .width(Length::Fixed(220.0));
 
     let content = row![preview, actions]
         .spacing(8)
