@@ -24,7 +24,7 @@ fn main() -> iced_layershell::Result {
 
     let settings = Settings {
         layer_settings: LayerShellSettings {
-            anchor: Anchor::Top | Anchor::Right,
+            anchor: Anchor::empty(),
             exclusive_zone: 0,
             size: Some((420, 480)),
             keyboard_interactivity: KeyboardInteractivity::OnDemand,
@@ -35,6 +35,7 @@ fn main() -> iced_layershell::Result {
 
     iced_layershell::application(AppState::new, "copied-gui", app::update, app::view)
         .subscription(app::subscription)
+        .theme(|_state: &AppState| iced::Theme::Dark)
         .settings(settings)
         .run()
 }

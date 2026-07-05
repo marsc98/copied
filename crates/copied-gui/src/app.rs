@@ -112,7 +112,7 @@ impl AppState {
         let needle = self.search.to_lowercase();
         self.items
             .iter()
-            .filter(|item| render_content(item).to_lowercase().contains(&needle))
+            .filter(|item| render_content(item, false).to_lowercase().contains(&needle))
             .collect()
     }
 
@@ -294,8 +294,20 @@ fn toggle_pin(state: &mut AppState, id: ItemId) {
 
 pub fn view(state: &AppState) -> Element<'_, Message> {
     let tab_bar = row![
-        button("Stack").on_press(Message::TabSelected(Tab::Stack)),
-        button("Símbolos").on_press(Message::TabSelected(Tab::Symbols)),
+        button("Stack")
+            .on_press(Message::TabSelected(Tab::Stack))
+            .style(move |theme, status| tab_button_style(
+                theme,
+                status,
+                state.active_tab == Tab::Stack
+            )),
+        button("Símbolos")
+            .on_press(Message::TabSelected(Tab::Symbols))
+            .style(move |theme, status| tab_button_style(
+                theme,
+                status,
+                state.active_tab == Tab::Symbols
+            )),
     ]
     .spacing(6);
 
@@ -312,7 +324,17 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
 
     column![tab_bar, search_box, body, status]
         .width(Length::Fill)
+        .spacing(10)
+        .padding(10)
         .into()
+}
+
+fn tab_button_style(theme: &iced::Theme, status: button::Status, active: bool) -> button::Style {
+    if active {
+        button::primary(theme, status)
+    } else {
+        button::secondary(theme, status)
+    }
 }
 
 fn view_stack(state: &AppState) -> Element<'_, Message> {
@@ -324,7 +346,7 @@ fn view_stack(state: &AppState) -> Element<'_, Message> {
         text("Nenhum resultado pra essa busca.").into()
     } else {
         let rows = filtered.into_iter().map(|item| render_item(state, item));
-        scrollable(column(rows).width(Length::Fill)).into()
+        scrollable(column(rows).width(Length::Fill).spacing(4)).into()
     }
 }
 
@@ -368,24 +390,22 @@ fn view_symbols(state: &AppState) -> Element<'_, Message> {
 }
 
 fn render_item<'a>(state: &AppState, item: &'a ItemView) -> Element<'a, Message> {
-    let marker = if state.selected == Some(item.id) {
-        "> "
-    } else {
-        "  "
-    };
+    let is_selected = state.selected == Some(item.id);
+    let is_hovered = state.hovered == Some(item.id);
     let pin_marker = if item.pinned { "[pin] " } else { "" };
-    let prefix = format!("{marker}{pin_marker}");
 
     let preview: Element<'_, Message> = match (&item.kind, state.image_cache.get(&item.id)) {
         (ItemKindView::Image { .. }, Some(handle)) => row![
-            text(prefix),
+            text(pin_marker),
             image(handle.clone())
                 .width(Length::Fixed(48.0))
                 .height(Length::Fixed(48.0)),
         ]
         .spacing(6)
         .into(),
-        _ => text(format!("{prefix}{}", render_content(item))).into(),
+        _ => text(format!("{pin_marker}{}", render_content(item, is_selected)))
+            .width(Length::Fill)
+            .into(),
     };
 
     let category_button =
@@ -394,18 +414,48 @@ fn render_item<'a>(state: &AppState, item: &'a ItemView) -> Element<'a, Message>
     let pin_button = button(if item.pinned { "unpin" } else { "pin" })
         .on_press(Message::TogglePinClicked(item.id));
 
-    let content = row![preview, category_button, pin_button].width(Length::Fill);
+    let actions = row![category_button, pin_button]
+        .spacing(6)
+        .width(Length::Fixed(150.0));
 
-    mouse_area(container(content).width(Length::Fill))
+    let content = row![preview, actions]
+        .spacing(8)
+        .width(Length::Fill)
+        .align_y(iced::Alignment::Center);
+
+    let item_container = container(content)
+        .width(Length::Fill)
+        .padding(8)
+        .style(move |theme: &iced::Theme| item_style(theme, is_selected, is_hovered));
+
+    mouse_area(item_container)
         .on_press(Message::ItemClicked(item.id))
         .on_enter(Message::ItemHovered(item.id))
         .on_exit(Message::ItemUnhovered)
         .into()
 }
 
-fn render_content(item: &ItemView) -> String {
+fn item_style(theme: &iced::Theme, selected: bool, hovered: bool) -> container::Style {
+    let palette = theme.extended_palette();
+    let background = if selected {
+        Some(palette.primary.weak.color.into())
+    } else if hovered {
+        Some(palette.background.weak.color.into())
+    } else {
+        None
+    };
+    container::Style {
+        background,
+        ..container::Style::default()
+    }
+}
+
+fn render_content(item: &ItemView, full: bool) -> String {
     match &item.kind {
         ItemKindView::Text { preview } => {
+            if full {
+                return preview.clone();
+            }
             let truncated: String = preview.chars().take(60).collect();
             if preview.chars().count() > 60 {
                 format!("{truncated}…")
