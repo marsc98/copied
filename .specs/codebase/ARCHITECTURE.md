@@ -15,8 +15,9 @@ graph TD
         M -->|wl-clipboard-rs::copy| WL[Wayland clipboard SET]
     end
 
-    KB[Atalho COSMIC] -->|abre terminal| CLI[copied-cli — ratatui TUI]
-    CLI <-->|unix socket NDJSON| L
+    KB[Atalho COSMIC] -->|executa direto, sem terminal| GUI[copied-gui — popup iced/layer-shell]
+    GUI -->|ipc_worker: thread + canal| L
+    GUI -->|símbolos: wl-clipboard-rs::copy direto| WL
 ```
 
 **3 threads nativas no daemon** (`crates/copied-daemon/src/main.rs`):
@@ -29,9 +30,9 @@ graph TD
 ### Domínio compartilhado via crate separado (`copied-core`)
 
 **Location:** `crates/copied-core/src/lib.rs`
-**Purpose:** Única fonte de verdade do protocolo IPC entre daemon e cliente — evita duplicar/dessincronizar `Command`/`Response` entre os dois binários.
-**Implementation:** Enums `Command`/`Response`/`ItemKindView` com `#[serde(tag = "...")]`, tipo `ItemId = Uuid`.
-**Example:** `copied_core::Command` usado tanto em `copied-daemon/src/ipc.rs:88` (parse) quanto em `copied-cli/src/ipc_client.rs:27` (serialize).
+**Purpose:** Única fonte de verdade do protocolo IPC entre daemon e cliente — evita duplicar/dessincronizar `Command`/`Response` entre os dois binários. Também concentra `socket_path()` (movida pra cá durante a feature `copied-gui`, resolvendo a duplicação que existia entre daemon e cliente — ver CONCERNS.md).
+**Implementation:** Enums `Command`/`Response`/`ItemKindView`/`Category` com `#[serde(tag = "...")]`, tipo `ItemId = Uuid`.
+**Example:** `copied_core::Command` usado tanto em `copied-daemon/src/ipc.rs` (parse) quanto em `copied-gui/src/ipc_client.rs` (serialize).
 
 ### Núcleo de domínio sem I/O, testável isoladamente
 
@@ -48,9 +49,15 @@ graph TD
 
 ### Protocolo de fio simples e sincrono (NDJSON sobre Unix socket)
 
-**Location:** `crates/copied-daemon/src/ipc.rs` (`handle_connection`), `crates/copied-cli/src/ipc_client.rs` (`IpcClient::send`)
+**Location:** `crates/copied-daemon/src/ipc.rs` (`handle_connection`), `crates/copied-gui/src/ipc_client.rs` (`IpcClient::send`)
 **Purpose:** Request/response síncrono, uma linha JSON por mensagem, sem framing binário.
 **Implementation:** Servidor lê linha a linha com `BufReader::lines()`; cliente escreve uma linha e bloqueia lendo a resposta com `read_line`.
+
+### Ponte entre IPC bloqueante e loop reativo do iced
+
+**Location:** `crates/copied-gui/src/ipc_worker.rs`
+**Purpose:** `IpcClient` é bloqueante (um `send`/`read_line` por vez); o `iced` roda um loop reativo baseado em `update`/`view`/`Subscription`. Uma thread nativa dedicada faz a ponte, honrando a convenção do projeto ("threads nativas, sem async runtime") mesmo no código do cliente.
+**Implementation:** `ipc_worker::spawn()` sobe uma thread que possui o `IpcClient`, consome `std::sync::mpsc::Receiver<Command>` (bloqueante) e produz `Response` num canal `futures::channel::mpsc::UnboundedSender`, exposto ao `iced` via `Subscription::run`. O `Sender<Command>` volta como a primeira mensagem do stream (`Message::IpcConnected`), padrão recomendado pela própria documentação do `iced` pra workers com canal bidirecional.
 
 ### Erros logados, nunca pânico em runtime de produção
 
@@ -67,14 +74,20 @@ graph TD
 3. Se `insert` evictar um item (LRU), e o evictado for imagem, o arquivo de cache correspondente é removido.
 4. `guard.persist()` grava o snapshot completo (`stack.json`) a cada mutação — sem batching, sem debounce.
 
-### Comando do cliente TUI → resposta
+### Comando do cliente GUI → resposta
 
-1. `copied-cli::app` monta um `Command` (`List`/`CopyToClipboard`/`Delete`/`Pin`/`Unpin`) a partir de tecla pressionada.
-2. `ipc_client::IpcClient::send` serializa, escreve linha no socket, bloqueia lendo a resposta.
+1. `copied-gui::app` monta um `Command` (`List`/`CopyToClipboard`/`Delete`/`Pin`/`Unpin`/`GetImageBytes`/`SetCategory`) a partir de tecla pressionada, clique do mouse ou resposta anterior (ex: refresh após `Ack` de mutação).
+2. `Message` correspondente é enviado por um `std::sync::mpsc::Sender<Command>` pro `ipc_worker`; a thread do worker chama `ipc_client::IpcClient::send`, que serializa, escreve linha no socket e bloqueia lendo a resposta.
 3. `copied-daemon::ipc::handle_connection` desserializa, adquire lock do `DaemonState`, despacha para `handle_command`.
-4. `handle_command` muta `Stack`, dispara efeitos colaterais (persist, cleanup de imagem, escrita real no clipboard via `clipboard_write`), devolve `Response`.
+4. `handle_command` muta `Stack`, dispara efeitos colaterais (persist, cleanup de imagem, escrita real no clipboard via `clipboard_write`, leitura de bytes de imagem pra `GetImageBytes`), devolve `Response`.
+5. A `Response` volta pelo canal `futures::channel::mpsc` do `ipc_worker` como `Message::IpcResponse`, processada em `app::update` (ex: `Response::Items` atualiza a lista; `Response::ImageBytes` popula o cache de miniatura; `Response::Ack` de `Copy` fecha a janela via `iced::exit()`).
+
+### Seleção de símbolo → clipboard (sem daemon)
+
+1. `copied-gui::app` na aba Símbolos filtra `symbols::CATALOG` pelo mesmo campo de busca da pilha.
+2. Selecionar um símbolo chama `wl-clipboard-rs::copy` **diretamente** (mesmo crate usado por `copied-daemon::clipboard_write`, mas sem passar pelo socket/daemon) e fecha a janela via `iced::exit()`.
 
 ## Code Organization
 
-**Approach:** Por camada técnica dentro de cada crate (não por feature) — `stack` (domínio), `persistence` (I/O disco), `ipc` (protocolo+orquestração), `watcher` (integração Wayland leitura), `clipboard_write` (integração Wayland escrita).
-**Module boundaries:** `copied-core` não depende de nenhum outro crate do workspace (fundação). `copied-daemon` depende de `copied-core`. `copied-cli` depende de `copied-core`, não de `copied-daemon` (comunicação só via socket, nunca via chamada de função direta).
+**Approach:** Por camada técnica dentro de cada crate (não por feature) — `stack`/`categorize` (domínio), `persistence` (I/O disco), `ipc` (protocolo+orquestração), `watcher` (integração Wayland leitura), `clipboard_write` (integração Wayland escrita) no daemon; `app`/`ipc_worker`/`ipc_client`/`instance_lock`/`symbols` no cliente gráfico.
+**Module boundaries:** `copied-core` não depende de nenhum outro crate do workspace (fundação). `copied-daemon` depende de `copied-core`. `copied-gui` depende de `copied-core`, não de `copied-daemon` (comunicação só via socket, nunca via chamada de função direta).

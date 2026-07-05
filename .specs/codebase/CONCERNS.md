@@ -1,6 +1,7 @@
 # Codebase Concerns
 
 **Analysis Date:** 2026-07-04
+**Atualizado:** 2026-07-04 (feature `copied-gui`)
 
 ## Tech Debt
 
@@ -12,13 +13,9 @@
 - Impact: se o processo for morto (`kill -9`, OOM killer, queda de energia) exatamente durante o `write`, `stack.json` fica truncado/parcial. No próximo boot, `persistence::load` detecta JSON inválido e **descarta a pilha inteira**, voltando pra vazia (comportamento correto de "não crashar", mas perde todo o histórico e pins, não só a última mutação).
 - Fix approach: escrever em `stack.json.tmp` no mesmo diretório e usar `fs::rename` (atômico na mesma partição) pra substituir o arquivo final.
 
-**`socket_path()` duplicada entre daemon e cliente:**
+**~~`socket_path()` duplicada entre daemon e cliente~~ — Resolvido (feature `copied-gui`, 2026-07-04):**
 
-- Issue: a mesma lógica (`$XDG_RUNTIME_DIR` + `.join("copied.sock")`) está implementada de forma idêntica em dois lugares.
-- Files: `crates/copied-daemon/src/ipc.rs:35-43`, `crates/copied-cli/src/ipc_client.rs:46-53`
-- Why: os dois binários não compartilham um crate de "config"/paths — só `copied-core` (tipos de protocolo).
-- Impact: baixo hoje (5 linhas, comportamento simples), mas qualquer mudança futura no path do socket exige lembrar de editar os dois arquivos em sincronia.
-- Fix approach: mover `socket_path()` pra `copied-core` como função pública única, usada por ambos.
+`socket_path()` foi movida pra `copied-core::socket_path()` (única fonte de verdade), usada por `copied-daemon::ipc` (re-export) e por `copied-gui::ipc_client`. Não há mais duplicação — o cliente novo (`copied-gui`) importa direto de `copied-core` em vez de reimplementar.
 
 ## Security Considerations
 
@@ -40,11 +37,12 @@
 
 ## Test Coverage Gaps
 
-**Orquestração de comandos IPC (`handle_command`, `handle_connection`):**
+**Orquestração de comandos IPC (`handle_command`, `handle_connection`) — parcialmente endereçado (feature `copied-gui`, 2026-07-04):**
 
-- What's not tested: `crates/copied-daemon/src/ipc.rs` — dispatch de `Command` → `Stack` → efeitos colaterais (persist, cleanup de imagem evictada, escrita real no clipboard) não tem nenhum teste automatizado. É a camada que mais orquestra side-effects (a lógica pura em `stack.rs` tem 14 testes; a camada que a conecta a I/O real, zero).
-- Risk: regressões na ordem de operações (ex: esquecer de chamar `cleanup_image_if_any` antes de `state.persist()`, ou inverter a checagem de `PinError::LimitReached` vs `NotFound`) não seriam pegas por `cargo test`.
-- Priority: Medium — a lógica de domínio isolada (`stack.rs`) já cobre os casos de borda mais importantes; o que falta é testar a colagem entre `Stack`, `persistence` e `Response`, o que exigiria um `DaemonState` de teste com dir temporário (viável sem Wayland/systemd real, ao contrário de `watcher`/`clipboard_write`).
+- O que passou a ser testado: os dois braços novos de `handle_command` — `GetImageBytes` (sucesso e arquivo ausente) e `SetCategory` (sucesso e id desconhecido) — ganharam 4 testes usando `DaemonState` com `tempfile::tempdir` (`crates/copied-daemon/src/ipc.rs`, módulo `tests`), provando que esse padrão de teste é viável sem Wayland/systemd real.
+- What's still not tested: os braços originais (`List`, `Delete`, `Pin`, `Unpin`, `CopyToClipboard`) continuam sem teste direto de `handle_command` — a cobertura desses fluxos vem só indiretamente da lógica pura em `stack.rs` (agora 17 testes) mais verificação manual via `copied-gui`.
+- Risk: regressões na ordem de operações dos braços antigos (ex: esquecer `cleanup_image_if_any` antes de `state.persist()` em `Delete`/`Unpin`) não seriam pegas por `cargo test`.
+- Priority: Medium — o padrão de teste já está estabelecido (ver `ipc.rs::tests::test_state()`); extensão pros braços restantes é um próximo passo de baixo risco, não uma mudança de abordagem.
 
 **Validação de tamanho de conteúdo (spec CLIP-07, Edge Cases) não implementada:**
 

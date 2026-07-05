@@ -13,72 +13,82 @@ copied/
 ├── crates/
 │   ├── copied-core/
 │   │   ├── Cargo.toml
-│   │   └── src/lib.rs            # Command/Response/ItemView (protocolo IPC)
+│   │   └── src/lib.rs            # Command/Response/ItemView/Category + socket_path() (protocolo IPC)
 │   ├── copied-daemon/
 │   │   ├── Cargo.toml
 │   │   └── src/
-│   │       ├── main.rs           # bootstrap: threads, xdg paths, loop principal
-│   │       ├── stack.rs          # domínio puro: LRU 15 + pins 5 + dedup
+│   │       ├── main.rs           # bootstrap: threads, xdg paths, loop principal, auto-detecção de categoria
+│   │       ├── stack.rs          # domínio puro: LRU 15 + pins 5 + dedup + category
+│   │       ├── categorize.rs     # heurística pura: detect(text) -> Category
 │   │       ├── persistence.rs    # stack.json + cache de imagens em disco
 │   │       ├── ipc.rs            # UnixListener, DaemonState, dispatch de Command
 │   │       ├── watcher.rs        # cliente Wayland wlr-data-control (leitura)
 │   │       └── clipboard_write.rs # escrita no clipboard via wl-clipboard-rs
-│   └── copied-cli/
+│   └── copied-gui/
 │       ├── Cargo.toml
 │       └── src/
-│           ├── main.rs            # bootstrap: conecta IPC, inicia ratatui
-│           ├── app.rs             # estado da TUI, event loop, render
-│           └── ipc_client.rs      # cliente do socket unix (send/recv NDJSON)
+│           ├── main.rs            # bootstrap: instance_lock, LayerShellSettings, iced_layershell::application(...).run()
+│           ├── app.rs             # AppState, Message, update/view/subscription (iced, modelo Elm)
+│           ├── ipc_worker.rs      # thread nativa + canal, ponte entre IpcClient bloqueante e Subscription do iced
+│           ├── ipc_client.rs      # cliente do socket unix (send/recv NDJSON) — movido de copied-cli
+│           ├── instance_lock.rs   # toggle de instância única (lock file + sinal Unix)
+│           └── symbols.rs         # catálogo estático de símbolos (dado puro, sem I/O)
 ├── deploy/
 │   ├── copied-daemon.service      # unit systemd --user
 │   └── install.sh                 # build + instala unit + instruções
 ├── target/                        # build artifacts (gitignored)
 └── .specs/                        # docs deste workflow (SDD)
     ├── codebase/                  # este diretório (brownfield mapping)
-    └── features/clipboard-manager/ # spec.md, context.md, design.md, tasks.md
+    └── features/                  # clipboard-manager/ e copied-gui/ (spec.md, context.md, design.md, tasks.md)
 ```
 
-**Nota:** não é repositório git (`git status` confirma: "not a git repository"). Diretório existe apenas localmente.
+**Nota:** repositório git local (inicializado durante a feature `copied-gui`, 2026-07-04). Sem remote configurado.
 
 ## Module Organization
 
 ### `copied-core` — Protocolo compartilhado
 
-**Purpose:** Tipos de domínio serializáveis compartilhados entre daemon e cliente; única fonte de verdade do contrato IPC.
-**Location:** `crates/copied-core/src/lib.rs` (114 linhas, arquivo único)
-**Key items:** `Command`, `Response`, `ItemView`, `ItemKindView`, `ItemId`
+**Purpose:** Tipos de domínio serializáveis compartilhados entre daemon e cliente; única fonte de verdade do contrato IPC; também concentra `socket_path()`.
+**Location:** `crates/copied-core/src/lib.rs` (arquivo único)
+**Key items:** `Command`, `Response`, `ItemView`, `ItemKindView`, `ItemId`, `Category`, `socket_path()`
 
 ### `copied-daemon` — Processo background
 
-**Purpose:** Captura clipboard, mantém pilha em memória, persiste em disco, serve IPC.
-**Location:** `crates/copied-daemon/src/` (6 arquivos, ~1000 linhas)
-**Key files:** `stack.rs` (382 linhas, maior arquivo do projeto — domínio), `watcher.rs` (305 linhas — integração Wayland mais complexa), `ipc.rs` (217 linhas — orquestração)
+**Purpose:** Captura clipboard, categoriza automaticamente, mantém pilha em memória, persiste em disco, serve IPC.
+**Location:** `crates/copied-daemon/src/` (7 arquivos)
+**Key files:** `stack.rs` (maior arquivo do projeto — domínio), `watcher.rs` (integração Wayland mais complexa), `ipc.rs` (orquestração, agora com testes de dispatch), `categorize.rs` (heurística nova, isolada)
 
-### `copied-cli` — Cliente TUI
+### `copied-gui` — Cliente gráfico (popup layer-shell)
 
-**Purpose:** Interface de terminal invocada sob demanda (atalho de teclado) pra visualizar/manipular a pilha.
-**Location:** `crates/copied-cli/src/` (3 arquivos, ~314 linhas)
-**Key files:** `app.rs` (193 linhas — estado + render + input), `ipc_client.rs` (98 linhas — protocolo de fio)
+**Purpose:** Janela overlay sem decoração (via `iced_layershell`) invocada sob demanda (atalho de teclado, sem terminal) pra visualizar/manipular a pilha, com busca, preview de imagem, categorização e aba de símbolos matemáticos/ícones. Substitui o antigo `copied-cli` (TUI).
+**Location:** `crates/copied-gui/src/` (6 arquivos)
+**Key files:** `app.rs` (maior arquivo — estado + update + view + subscription), `ipc_worker.rs` (ponte thread+canal pro modelo reativo do iced), `instance_lock.rs` (toggle de instância única)
 
 ## Where Things Live
 
 **Captura de clipboard (leitura):**
 - Integração Wayland: `crates/copied-daemon/src/watcher.rs`
-- Lógica de negócio (LRU/dedup/pins): `crates/copied-daemon/src/stack.rs`
+- Lógica de negócio (LRU/dedup/pins/categoria): `crates/copied-daemon/src/stack.rs`
+- Heurística de categoria: `crates/copied-daemon/src/categorize.rs`
 - Persistência: `crates/copied-daemon/src/persistence.rs`
 
 **Escrita de volta no clipboard:**
-- `crates/copied-daemon/src/clipboard_write.rs` (chamado por `ipc.rs::copy_to_clipboard`)
+- Via daemon (item da pilha): `crates/copied-daemon/src/clipboard_write.rs` (chamado por `ipc.rs::copy_to_clipboard`)
+- Direto do cliente (símbolo): `crates/copied-gui/src/app.rs` (`wl-clipboard-rs`, sem passar pelo daemon)
 
 **Protocolo IPC (contrato):**
-- Definição: `crates/copied-core/src/lib.rs`
+- Definição + `socket_path()`: `crates/copied-core/src/lib.rs`
 - Servidor: `crates/copied-daemon/src/ipc.rs`
-- Cliente: `crates/copied-cli/src/ipc_client.rs`
+- Cliente: `crates/copied-gui/src/ipc_client.rs`
 
 **Interface do usuário:**
-- `crates/copied-cli/src/app.rs` (ratatui — draw + handle_events)
+- `crates/copied-gui/src/app.rs` (iced — update/view/subscription)
+- Catálogo de símbolos: `crates/copied-gui/src/symbols.rs`
+
+**Instância única / toggle:**
+- `crates/copied-gui/src/instance_lock.rs` (lock file `$XDG_RUNTIME_DIR/copied-gui.pid` + `SIGUSR1`)
 
 **Configuração/Deploy:**
 - Unit systemd: `deploy/copied-daemon.service`
 - Script de instalação: `deploy/install.sh`
-- Paths XDG (runtime): resolvidos em código, não config file — `copied-daemon/src/main.rs::xdg_dir` e `ipc.rs::socket_path`
+- Paths XDG (runtime): resolvidos em código, não config file — `copied-daemon/src/main.rs::xdg_dir` e `copied-core::socket_path`

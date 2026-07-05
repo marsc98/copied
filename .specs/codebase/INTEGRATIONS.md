@@ -27,12 +27,12 @@
 **Locations:**
 - `$XDG_DATA_HOME/copied/stack.json` (fallback `~/.local/share/copied/stack.json`) — resolvido em `copied-daemon/src/main.rs::stack_path`
 - `$XDG_CACHE_HOME/copied/images/` (fallback `~/.cache/copied/images/`) — `main.rs::image_cache_dir`
-- `$XDG_RUNTIME_DIR/copied.sock` — `copied-daemon/src/ipc.rs::socket_path` e `copied-cli/src/ipc_client.rs::socket_path` (duplicado nos dois crates, ver CONCERNS.md)
+- `$XDG_RUNTIME_DIR/copied.sock` — `copied_core::socket_path()`, única definição usada por `copied-daemon` (re-exportada em `ipc.rs`) e `copied-gui/src/ipc_client.rs` (duplicação resolvida, ver CONCERNS.md)
 
 ## Unix Domain Socket (IPC interno)
 
-**Purpose:** Protocolo entre `copied-daemon` e `copied` (cliente TUI) — não é integração externa, mas é o único canal de comunicação entre os dois binários do produto.
-**Implementation:** NDJSON sobre `UnixListener`/`UnixStream`, servidor em `copied-daemon/src/ipc.rs`, cliente em `copied-cli/src/ipc_client.rs`. Contrato de mensagens definido em `copied-core/src/lib.rs`.
+**Purpose:** Protocolo entre `copied-daemon` e `copied` (cliente gráfico `copied-gui`) — não é integração externa, mas é o único canal de comunicação entre os dois binários do produto.
+**Implementation:** NDJSON sobre `UnixListener`/`UnixStream`, servidor em `copied-daemon/src/ipc.rs`, cliente em `copied-gui/src/ipc_client.rs`. Contrato de mensagens definido em `copied-core/src/lib.rs`.
 
 ## Background Jobs
 
