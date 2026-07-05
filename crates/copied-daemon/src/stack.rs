@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 pub const MAX_ITEMS: usize = 15;
-pub const MAX_PINS: usize = 5;
+pub const MAX_PINS: usize = 3;
 
 pub fn content_hash(bytes: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
@@ -280,7 +280,7 @@ mod tests {
     }
 
     #[test]
-    fn pin_rejects_sixth_pin_with_limit_reached() {
+    fn pin_rejects_pin_past_limit_with_limit_reached() {
         let mut stack = Stack::default();
         let mut ids = vec![];
         for i in 0..MAX_PINS {
@@ -291,9 +291,9 @@ mod tests {
         }
         assert_eq!(stack.pins().count(), MAX_PINS);
 
-        stack.push_text("sixth".into());
-        let sixth_id = stack.items().next().unwrap().id;
-        let result = stack.pin(sixth_id);
+        stack.push_text("one-past-limit".into());
+        let extra_id = stack.items().next().unwrap().id;
+        let result = stack.pin(extra_id);
 
         assert_eq!(result, Err(PinError::LimitReached));
         assert_eq!(stack.pins().count(), MAX_PINS, "não deve alterar os pins");

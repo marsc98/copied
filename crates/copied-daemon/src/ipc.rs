@@ -116,7 +116,7 @@ fn handle_command(state: &mut DaemonState, cmd: Command) -> Response {
                 Response::Ack
             }
             Err(PinError::LimitReached) => Response::Error {
-                message: "Máximo de 5 pins atingido — despine algo primeiro".into(),
+                message: "Máximo de 3 pins atingido — despine algo primeiro".into(),
             },
             Err(PinError::NotFound) => not_found(),
         },
