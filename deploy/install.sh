@@ -2,7 +2,7 @@
 # Install script for copied (clipboard manager for Pop!_OS 24.04 / COSMIC / Wayland).
 #
 # What this does, in order:
-#   1. Builds and installs the daemon + TUI client binaries via `cargo install`.
+#   1. Builds and installs the daemon + GUI client binaries via `cargo install`.
 #   2. Writes /etc/profile.d/copied-clipboard.sh to enable the Wayland data-control
 #      protocol system-wide (requires sudo + a REBOOT to take effect).
 #   3. Installs and enables the copied-daemon systemd user unit.
@@ -31,7 +31,7 @@ if command -v cargo >/dev/null 2>&1; then
     (
         cd "$REPO_ROOT"
         cargo install --path crates/copied-daemon --force
-        cargo install --path crates/copied-cli --force
+        cargo install --path crates/copied-gui --force
     )
     echo "Installed: $HOME/.cargo/bin/copied-daemon and $HOME/.cargo/bin/copied"
 else
@@ -39,7 +39,7 @@ else
 cargo not found. Build manually and copy the binaries yourself, e.g.:
 
     cargo build --release --manifest-path crates/copied-daemon/Cargo.toml
-    cargo build --release --manifest-path crates/copied-cli/Cargo.toml
+    cargo build --release --manifest-path crates/copied-gui/Cargo.toml
     mkdir -p ~/.cargo/bin
     cp target/release/copied-daemon ~/.cargo/bin/
     cp target/release/copied ~/.cargo/bin/
@@ -91,9 +91,9 @@ Configure a custom keyboard shortcut in:
 
     COSMIC Settings > Keyboard > Custom Shortcuts
 
-Command to bind (adjust terminal if you don't use cosmic-term):
+Command to bind (opens a graphical popup directly, no terminal needed):
 
-    cosmic-term -e copied
+    copied
 
 EOF
 
