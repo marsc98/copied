@@ -3,7 +3,7 @@ use std::sync::mpsc::Sender;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
-use copied_core::{Category, Command, ItemId, ItemKindView, ItemView, Response};
+use copied_core::{Command, ItemId, ItemKindView, ItemView, Response};
 use futures::stream::{self, Stream, StreamExt};
 use iced::keyboard::key::Named;
 use iced::keyboard::{Event as KeyboardEvent, Key};
@@ -51,7 +51,6 @@ enum PendingAction {
     Copy,
     Delete,
     TogglePin,
-    SetCategory,
     FetchImage(ItemId),
 }
 
@@ -78,7 +77,7 @@ pub enum Message {
     ItemUnhovered,
     ItemClicked(ItemId),
     TogglePinClicked(ItemId),
-    CategoryClicked(ItemId),
+    DeleteClicked(ItemId),
     MoveSelection(isize),
     SearchChanged(String),
     EnterPressed,
@@ -198,9 +197,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 Response::Ack => match action {
                     Some(PendingAction::Copy) => iced::exit(),
-                    Some(PendingAction::Delete)
-                    | Some(PendingAction::TogglePin)
-                    | Some(PendingAction::SetCategory) => {
+                    Some(PendingAction::Delete) | Some(PendingAction::TogglePin) => {
                         state.status = None;
                         state.send(Command::List, PendingAction::List);
                         Task::none()
@@ -242,15 +239,9 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             toggle_pin(state, id);
             Task::none()
         }
-        Message::CategoryClicked(id) => {
+        Message::DeleteClicked(id) => {
             state.selected = Some(id);
-            if let Some(item) = state.items.iter().find(|item| item.id == id) {
-                let category = next_category(item.category);
-                state.send(
-                    Command::SetCategory { id, category },
-                    PendingAction::SetCategory,
-                );
-            }
+            state.send(Command::Delete { id }, PendingAction::Delete);
             Task::none()
         }
         Message::MoveSelection(delta) => {
@@ -319,16 +310,6 @@ fn copy_symbol_to_clipboard(symbol: &str) -> Result<(), wl_clipboard_rs::copy::E
     let options = Options::default();
     let source = Source::Bytes(symbol.as_bytes().to_vec().into_boxed_slice());
     copy::copy(options, source, MimeType::Text)
-}
-
-fn next_category(current: Category) -> Category {
-    match current {
-        Category::Texto => Category::Url,
-        Category::Url => Category::Codigo,
-        Category::Codigo => Category::Imagem,
-        Category::Imagem => Category::Outro,
-        Category::Outro => Category::Texto,
-    }
 }
 
 fn scroll_to_selection(state: &AppState) -> Task<Message> {
@@ -526,13 +507,12 @@ fn render_item<'a>(
             .into(),
     };
 
-    let category_button =
-        button(text(format!("{:?}", item.category))).on_press(Message::CategoryClicked(item.id));
-
     let pin_button = button(if item.pinned { "unpin" } else { "pin" })
         .on_press(Message::TogglePinClicked(item.id));
 
-    let actions = row![category_button, pin_button]
+    let delete_button = button("Delete").on_press(Message::DeleteClicked(item.id));
+
+    let actions = row![pin_button, delete_button]
         .spacing(6)
         .width(Length::Fixed(150.0));
 
