@@ -7,6 +7,8 @@
 
 Clipboard history manager for **Pop!_OS 24.04 (COSMIC) / Wayland**. Runs as a background daemon, keeps the last copied items (text and images), lets you pin favorites, auto-categorizes content, and opens a quick popup to search/paste back — no terminal, triggered by a keyboard shortcut.
 
+I created this application to train my AI-assisted development flow and at the same time start studying Rust since I always enjoyed learning by unraveling real applications, so I thought, I will exercise language agnostic architecture and Rust in something functional. I looked for something that would help in my daily life and so I remembered that I am annoying and had not found a manager that would allow me to have more features and it hurts me to admit it more similar to Windows. It is under construction and has some gaps but I will try to update it (CLT does it in my spare time). 
+
 ## What it does
 
 - **History** of the last 15 copied items (text or image), deduplicated by hash.
