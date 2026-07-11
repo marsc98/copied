@@ -1,1 +1,16 @@
+# Build artifacts
 /target
+**/*.rs.bk
+
+# Claude Code local state (não faz parte do projeto)
+.claude/
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
