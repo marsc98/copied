@@ -7,7 +7,9 @@
 
 Gerenciador de histórico de clipboard pra **Pop!_OS 24.04 (COSMIC) / Wayland**. Roda como daemon em background, guarda os últimos itens copiados (texto e imagem), deixa fixar favoritos, categoriza automaticamente e abre um popup rápido pra buscar/colar de volta — sem terminal, via atalho de teclado.
 
-## O que faz
+Criei essa aplicação para treinar meu fluxo de desenvolvimento assistido por IA e ao mesmo tempo começar a estudar Rust já que sempre gostei de aprender desvendando aplicações reais, logo pensei, vou exercitar arquitetura agnóstica a linguagem e Rust em algo funcional. Busquei algo que ajudaria no meu dia a dia e assim lembrei que sou chato e não havia encontrado um gerenciador que me permitisse ter mais funcionalidades e me dói admitir mas parecido com o do windows. Ele está em construção e tem alguns gaps mas vou tentar ir atualizando (CLT faz no tempo livre). 
+
+## O que faz 
 
 - **Histórico** dos últimos 15 itens copiados (texto ou imagem), com deduplicação por hash.
 - **Pins**: até 5 itens fixados, que não saem por LRU.
