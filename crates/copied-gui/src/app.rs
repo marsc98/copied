@@ -344,15 +344,15 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
         }
         Message::EnterPressed => match state.focus {
             Focus::TabStack => {
-                state.active_tab = Tab::Stack;
+                activate_tab(state, Tab::Stack);
                 Task::none()
             }
             Focus::TabSymbols => {
-                state.active_tab = Tab::Symbols;
+                activate_tab(state, Tab::Symbols);
                 Task::none()
             }
             Focus::TabEmojis => {
-                state.active_tab = Tab::Emojis;
+                activate_tab(state, Tab::Emojis);
                 Task::none()
             }
             Focus::Search | Focus::List => match state.active_tab {
@@ -395,15 +395,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::TabSelected(tab) => {
-            state.active_tab = tab;
-            state.focus = match tab {
-                Tab::Stack => Focus::TabStack,
-                Tab::Symbols => Focus::TabSymbols,
-                Tab::Emojis => Focus::TabEmojis,
-            };
-            if tab != Tab::Stack {
-                state.clamp_symbol_selection();
-            }
+            activate_tab(state, tab);
             Task::none()
         }
         Message::SymbolClicked(symbol) => {
@@ -439,6 +431,14 @@ fn scroll_to_selection(state: &AppState) -> Task<Message> {
             y: fraction,
         },
     )
+}
+
+fn activate_tab(state: &mut AppState, tab: Tab) {
+    state.active_tab = tab;
+    state.focus = Focus::List;
+    if tab != Tab::Stack {
+        state.clamp_symbol_selection();
+    }
 }
 
 fn toggle_pin(state: &mut AppState, id: ItemId) {

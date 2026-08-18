@@ -153,15 +153,15 @@ edição; sem dependência funcional real)
 - Skill: NONE
 
 **Done when**:
-- [ ] Clicar numa aba (Stack, Símbolos ou Emojis) deixa `state.focus ==
+- [x] Clicar numa aba (Stack, Símbolos ou Emojis) deixa `state.focus ==
       Focus::List` imediatamente
-- [ ] Apertar Enter com foco em `Focus::TabStack`/`TabSymbols`/`TabEmojis`
+- [x] Apertar Enter com foco em `Focus::TabStack`/`TabSymbols`/`TabEmojis`
       tem o mesmo efeito (ativa a aba E deixa foco em `List`)
-- [ ] Trocar pra Símbolos/Emojis (por clique ou Enter) chama
+- [x] Trocar pra Símbolos/Emojis (por clique ou Enter) chama
       `clamp_symbol_selection` nos dois caminhos igualmente
-- [ ] `Focus::TabStack`/`TabSymbols`/`TabEmojis` continuam existindo (ainda
+- [x] `Focus::TabStack`/`TabSymbols`/`TabEmojis` continuam existindo (ainda
       necessários pro ciclo de `Tab` e o realce visual do botão da aba)
-- [ ] Gate check passa: `cargo test -p copied-gui && cargo clippy -p copied-gui -- -D warnings`
+- [x] Gate check passa: `cargo test -p copied-gui && cargo clippy -p copied-gui -- -D warnings`
 
 **Tests**: none (matriz `TESTING.md` cobre `copied-gui::app` como Manual)
 **Gate**: quick
