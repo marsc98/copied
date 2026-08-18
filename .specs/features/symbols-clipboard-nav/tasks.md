@@ -307,11 +307,11 @@ manual `copied-gui::app` ganha menção à cópia de símbolo/emoji via daemon e
 - Skill: NONE
 
 **Done when**:
-- [ ] `cargo test --workspace` passa (contagem de testes atualizada de 49
+- [x] `cargo test --workspace` passa (contagem de testes atualizada de 49
       pra 50)
-- [ ] `cargo clippy --workspace -- -D warnings` sem warnings
-- [ ] `cargo fmt --check` sem diffs
-- [ ] `TESTING.md` reflete a nova contagem de testes e a navegação por
+- [x] `cargo clippy --workspace -- -D warnings` sem warnings
+- [x] `cargo fmt --check` sem diffs
+- [x] `TESTING.md` reflete a nova contagem de testes e a navegação por
       grade/cópia via daemon na linha manual de `copied-gui::app`
 
 **Tests**: workspace completo

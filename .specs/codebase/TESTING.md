@@ -3,6 +3,7 @@
 **Status**: Estratégia definida em `/taskify` (2026-07-03). Atualizado em 2026-07-04 (brownfield mapping) — testes unitários já escritos e presentes no código (confirmado por leitura direta dos arquivos-fonte).
 **Atualizado novamente em 2026-07-04** (feature `copied-gui`): TUI (`copied-cli`) substituída por GUI (`copied-gui`); protocolo ganhou `GetImageBytes`/`SetCategory`.
 **Atualizado novamente em 2026-08-18** (feature `symbols-emoji-catalog`): `copied-gui::symbols` ganhou `EMOJI_CATALOG` e teste correspondente; `copied-gui::app` ganhou a aba Emojis.
+**Atualizado novamente em 2026-08-18** (feature `symbols-clipboard-nav`): novo `Command::CopyText` em `copied-core` (protocolo) com handler no daemon; `copied-gui::app` agora copia símbolo/emoji pelo daemon (removida escrita direta via `wl-clipboard-rs`) e ganhou navegação ↑/↓ por linha na grade de 9 colunas, com auto-scroll e cruzamento circular entre grupos.
 
 ## Test Frameworks
 
@@ -19,7 +20,7 @@
 
 | Camada                                              | Tipo de teste     | Onde                                | Comando        |
 | ---------------------------------------------------- | ------------------ | ------------------------------------ | -------------- |
-| `copied-core::lib` (Command/Response/ItemView/Category serde round-trip) | Unit (`cargo test`) | `crates/copied-core/src/lib.rs` (13 testes) | `cargo test -p copied-core` |
+| `copied-core::lib` (Command/Response/ItemView/Category serde round-trip) | Unit (`cargo test`) | `crates/copied-core/src/lib.rs` (14 testes) | `cargo test -p copied-core` |
 | `copied-daemon::stack` (LRU, dedup, pin/unpin/delete, categoria) | Unit (`cargo test`) | `crates/copied-daemon/src/stack.rs` (17 testes) | `cargo test -p copied-daemon` |
 | `copied-daemon::categorize` (heurística URL/código/outro) | Unit (`cargo test`) | `crates/copied-daemon/src/categorize.rs` (3 testes) | `cargo test -p copied-daemon` |
 | `copied-daemon::persistence` (load/save, corrupção, imagens, migração de categoria) | Unit (`cargo test`, `tempfile`) | `crates/copied-daemon/src/persistence.rs` (6 testes) | `cargo test -p copied-daemon` |
@@ -29,7 +30,7 @@
 | `copied-gui::symbols` (catálogos estáticos não-vazios: símbolos e emojis) | Unit (`cargo test`, trivial) | `crates/copied-gui/src/symbols.rs` (2 testes) | `cargo test -p copied-gui` |
 | `copied-daemon::watcher` (Wayland ext-data-control)   | Manual              | Rodar daemon real, copiar conteúdo, observar log/pilha | N/A |
 | `copied-daemon::clipboard_write` (escrita real)       | Manual              | Rodar daemon real, copiar de volta, colar em outro app | N/A |
-| `copied-gui::app` (event loop de UI: nav teclado/mouse, busca, preview, categoria, abas símbolos e emojis) | Manual              | Rodar `copied-gui` real, popular pilha, testar cada ação, incluindo navegação por grade na aba Emojis | N/A |
+| `copied-gui::app` (event loop de UI: nav teclado/mouse, busca, preview, categoria, abas símbolos e emojis) | Manual              | Rodar `copied-gui` real, popular pilha, testar cada ação, incluindo cópia de símbolo/emoji via daemon (`Command::CopyText`) e navegação ↑/↓ por linha na grade (cruzamento de grupo e auto-scroll) | N/A |
 | `copied-gui::main` (janela layer-shell, toggle de instância, Esc) | Manual              | Acionar o binário, testar popup/toggle/Esc num compositor Wayland real | N/A |
 | systemd unit / autostart                              | Manual              | `systemctl --user status`, logout/login | N/A |
 
@@ -38,7 +39,7 @@
 ## Test Execution
 
 ```bash
-cargo test --workspace          # roda todos os testes unitários/integração (49 testes no total)
+cargo test --workspace          # roda todos os testes unitários/integração (50 testes no total)
 cargo test -p copied-daemon      # só o crate do daemon
 cargo test -p copied-gui         # só o crate do cliente gráfico
 cargo clippy --workspace -- -D warnings
