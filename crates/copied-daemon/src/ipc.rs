@@ -145,6 +145,13 @@ fn handle_command(state: &mut DaemonState, cmd: Command) -> Response {
             }
             Err(CategoryError::NotFound) => not_found(),
         },
+
+        Command::CopyText { text } => match clipboard_write::write_text(&text) {
+            Ok(()) => Response::Ack,
+            Err(err) => Response::Error {
+                message: format!("falha escrevendo no clipboard: {err}"),
+            },
+        },
     }
 }
 

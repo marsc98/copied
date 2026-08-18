@@ -76,11 +76,11 @@ erro já usado em `copy_to_clipboard`.
 - Skill: NONE
 
 **Done when**:
-- [ ] `handle_command` trata `Command::CopyText` sem passar pela stack/
+- [x] `handle_command` trata `Command::CopyText` sem passar pela stack/
       `DaemonState` (não precisa de `id`, não precisa persistir nada)
-- [ ] Sucesso retorna `Response::Ack`; falha retorna `Response::Error` com
+- [x] Sucesso retorna `Response::Ack`; falha retorna `Response::Error` com
       mensagem descritiva
-- [ ] Gate check passa: `cargo test -p copied-daemon && cargo clippy -p copied-daemon -- -D warnings`
+- [x] Gate check passa: `cargo test -p copied-daemon && cargo clippy -p copied-daemon -- -D warnings`
 
 **Tests**: none — mesmo padrão já estabelecido para `Command::CopyToClipboard`
 (escreve na clipboard real via `wl_clipboard_rs`, não testável em unit test
