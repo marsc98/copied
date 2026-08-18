@@ -28,6 +28,7 @@ pub enum Command {
     Unpin { id: ItemId },
     GetImageBytes { id: ItemId },
     SetCategory { id: ItemId, category: Category },
+    CopyText { text: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -99,6 +100,13 @@ mod tests {
     #[test]
     fn command_unpin_roundtrips() {
         roundtrip(Command::Unpin { id: Uuid::new_v4() });
+    }
+
+    #[test]
+    fn command_copy_text_roundtrips() {
+        roundtrip(Command::CopyText {
+            text: "hello".into(),
+        });
     }
 
     #[test]
