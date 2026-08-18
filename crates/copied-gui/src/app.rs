@@ -207,23 +207,17 @@ impl AppState {
         }
     }
 
-    fn move_symbol_group(&mut self, delta: isize) {
+    fn move_symbol_row(&mut self, delta: isize) {
         let groups = visible_symbol_groups(self, active_catalog(self.active_tab));
         if groups.is_empty() {
             self.selected_symbol = None;
             return;
         }
-        let current_group = self
-            .selected_symbol
-            .and_then(|symbol| {
-                groups
-                    .iter()
-                    .position(|(_, symbols)| symbols.contains(&symbol))
-            })
-            .unwrap_or(0) as isize;
-        let len = groups.len() as isize;
-        let next = (current_group + delta).rem_euclid(len) as usize;
-        self.selected_symbol = groups[next].1.first().copied();
+        let steps = delta.unsigned_abs();
+        let direction: isize = if delta < 0 { -1 } else { 1 };
+        for _ in 0..steps {
+            self.selected_symbol = Some(next_row_symbol(&groups, self.selected_symbol, direction));
+        }
     }
 
     fn move_symbol_index(&mut self, delta: isize) {
@@ -327,7 +321,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 scroll_to_selection(state)
             }
             Tab::Symbols | Tab::Emojis => {
-                state.move_symbol_group(delta);
+                state.move_symbol_row(delta);
                 Task::none()
             }
         },
@@ -581,6 +575,57 @@ fn view_stack(state: &AppState) -> Element<'_, Message> {
             .id(LIST_ID)
             .into()
     }
+}
+
+fn symbol_row_count(len: usize) -> usize {
+    if len == 0 {
+        0
+    } else {
+        (len - 1) / SYMBOL_GRID_COLUMNS + 1
+    }
+}
+
+fn next_row_symbol(
+    groups: &[(&'static str, Vec<&'static str>)],
+    selected: Option<&'static str>,
+    direction: isize,
+) -> &'static str {
+    let group_count = groups.len();
+    let (group_idx, index) = selected
+        .and_then(|symbol| {
+            groups.iter().enumerate().find_map(|(gi, (_, symbols))| {
+                symbols
+                    .iter()
+                    .position(|s| *s == symbol)
+                    .map(|idx| (gi, idx))
+            })
+        })
+        .unwrap_or((0, 0));
+
+    let row = index / SYMBOL_GRID_COLUMNS;
+    let col = index % SYMBOL_GRID_COLUMNS;
+    let rows_in_group = symbol_row_count(groups[group_idx].1.len());
+    let mut new_row = row as isize + direction;
+    let mut new_group = group_idx;
+
+    if new_row < 0 {
+        new_group = (group_idx + group_count - 1) % group_count;
+        new_row = symbol_row_count(groups[new_group].1.len()) as isize - 1;
+    } else if new_row >= rows_in_group as isize {
+        new_group = (group_idx + 1) % group_count;
+        new_row = 0;
+    }
+
+    let len = groups[new_group].1.len();
+    let last_row = symbol_row_count(len) - 1;
+    let row_start = (new_row as usize) * SYMBOL_GRID_COLUMNS;
+    let row_len = if new_row as usize == last_row {
+        len - row_start
+    } else {
+        SYMBOL_GRID_COLUMNS
+    };
+    let final_col = col.min(row_len - 1);
+    groups[new_group].1[row_start + final_col]
 }
 
 fn visible_symbol_groups(

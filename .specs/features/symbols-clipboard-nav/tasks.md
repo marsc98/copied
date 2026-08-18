@@ -225,23 +225,28 @@ padrão de wraparound circular (`rem_euclid`) já usado em
 - Skill: NONE
 
 **Done when**:
-- [ ] ↓ move a seleção uma linha abaixo no grupo atual, mesma coluna
-- [ ] ↑ move a seleção uma linha acima no grupo atual, mesma coluna
-- [ ] ↓ na última linha do grupo cruza pra primeira linha do próximo grupo,
+- [x] ↓ move a seleção uma linha abaixo no grupo atual, mesma coluna
+- [x] ↑ move a seleção uma linha acima no grupo atual, mesma coluna
+- [x] ↓ na última linha do grupo cruza pra primeira linha do próximo grupo,
       mesma coluna (ajustada pro último item se a linha for mais curta)
-- [ ] ↑ na primeira linha do grupo cruza pra última linha do grupo anterior,
+- [x] ↑ na primeira linha do grupo cruza pra última linha do grupo anterior,
       mesma coluna (ajustada)
-- [ ] ↓ no último item do último grupo circula pro primeiro item do
+- [x] ↓ no último item do último grupo circula pro primeiro item do
       primeiro grupo; ↑ no primeiro item do primeiro grupo circula pro
       último item do último grupo
-- [ ] `move_symbol_group` removido (sem uso restante)
-- [ ] ←/→ (`move_symbol_index`) permanecem sem nenhuma alteração de
+- [x] `move_symbol_group` removido (sem uso restante)
+- [x] ←/→ (`move_symbol_index`) permanecem sem nenhuma alteração de
       comportamento
-- [ ] Gate check passa: `cargo test -p copied-gui && cargo clippy -p copied-gui -- -D warnings`
+- [x] Gate check passa: `cargo test -p copied-gui && cargo clippy -p copied-gui -- -D warnings`
 - [ ] Verificação manual: `cargo run -p copied-gui`, navegar até o fim de um
       grupo grande (ex: "Números Especiais") e confirmar cruzamento de
       grupo mantendo coluna; navegar até o fim do catálogo e confirmar
       wraparound circular
+      **PENDENTE**: sem display Wayland interativo neste ambiente. Lógica
+      validada com 7 cenários de teste temporários (linha acima/abaixo,
+      cruzamento pra frente/trás com ajuste de coluna curta, wraparound nos
+      dois extremos, grupo único) rodados e removidos antes do commit — a
+      matriz `TESTING.md` mantém `copied-gui::app` como Manual
 
 **Tests**: none (matriz `TESTING.md` cobre `copied-gui::app` como Manual)
 **Gate**: quick
