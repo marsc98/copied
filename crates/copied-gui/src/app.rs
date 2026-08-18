@@ -21,12 +21,14 @@ use crate::symbols;
 pub enum Tab {
     Stack,
     Symbols,
+    Emojis,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Focus {
     TabStack,
     TabSymbols,
+    TabEmojis,
     Search,
     List,
 }
@@ -35,10 +37,19 @@ impl Focus {
     fn next(self) -> Self {
         match self {
             Focus::TabStack => Focus::TabSymbols,
-            Focus::TabSymbols => Focus::Search,
+            Focus::TabSymbols => Focus::TabEmojis,
+            Focus::TabEmojis => Focus::Search,
             Focus::Search => Focus::List,
             Focus::List => Focus::TabStack,
         }
+    }
+}
+
+fn active_catalog(tab: Tab) -> &'static [symbols::SymbolGroup] {
+    match tab {
+        Tab::Symbols => symbols::CATALOG,
+        Tab::Emojis => symbols::EMOJI_CATALOG,
+        Tab::Stack => unreachable!("aba Stack não tem catálogo de símbolos"),
     }
 }
 
@@ -183,7 +194,7 @@ impl AppState {
     }
 
     fn clamp_symbol_selection(&mut self) {
-        let groups = visible_symbol_groups(self);
+        let groups = visible_symbol_groups(self, active_catalog(self.active_tab));
         let still_visible = self
             .selected_symbol
             .is_some_and(|symbol| groups.iter().any(|(_, symbols)| symbols.contains(&symbol)));
@@ -195,7 +206,7 @@ impl AppState {
     }
 
     fn move_symbol_group(&mut self, delta: isize) {
-        let groups = visible_symbol_groups(self);
+        let groups = visible_symbol_groups(self, active_catalog(self.active_tab));
         if groups.is_empty() {
             self.selected_symbol = None;
             return;
@@ -214,7 +225,7 @@ impl AppState {
     }
 
     fn move_symbol_index(&mut self, delta: isize) {
-        let groups = visible_symbol_groups(self);
+        let groups = visible_symbol_groups(self, active_catalog(self.active_tab));
         if groups.is_empty() {
             self.selected_symbol = None;
             return;
@@ -313,13 +324,13 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 state.move_selection(delta);
                 scroll_to_selection(state)
             }
-            Tab::Symbols => {
+            Tab::Symbols | Tab::Emojis => {
                 state.move_symbol_group(delta);
                 Task::none()
             }
         },
         Message::MoveSymbolIndex(delta) => {
-            if state.active_tab == Tab::Symbols {
+            if state.active_tab != Tab::Stack {
                 state.move_symbol_index(delta);
             }
             Task::none()
@@ -339,6 +350,10 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 state.active_tab = Tab::Symbols;
                 Task::none()
             }
+            Focus::TabEmojis => {
+                state.active_tab = Tab::Emojis;
+                Task::none()
+            }
             Focus::Search | Focus::List => match state.active_tab {
                 Tab::Stack => {
                     if let Some(id) = state.selected {
@@ -346,7 +361,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     }
                     Task::none()
                 }
-                Tab::Symbols => {
+                Tab::Symbols | Tab::Emojis => {
                     if let Some(symbol) = state.selected_symbol {
                         let _ = copy_symbol_to_clipboard(symbol);
                         iced::exit()
@@ -380,8 +395,9 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             state.focus = match tab {
                 Tab::Stack => Focus::TabStack,
                 Tab::Symbols => Focus::TabSymbols,
+                Tab::Emojis => Focus::TabEmojis,
             };
-            if tab == Tab::Symbols {
+            if tab != Tab::Stack {
                 state.clamp_symbol_selection();
             }
             Task::none()
@@ -453,6 +469,14 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
                 state.active_tab == Tab::Symbols,
                 state.focus == Focus::TabSymbols
             )),
+        button("Emojis")
+            .on_press(Message::TabSelected(Tab::Emojis))
+            .style(move |theme, status| tab_button_style(
+                theme,
+                status,
+                state.active_tab == Tab::Emojis,
+                state.focus == Focus::TabEmojis
+            )),
     ]
     .spacing(6);
 
@@ -463,7 +487,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
 
     let body = match state.active_tab {
         Tab::Stack => view_stack(state),
-        Tab::Symbols => view_symbols(state),
+        Tab::Symbols | Tab::Emojis => view_symbol_catalog(state, active_catalog(state.active_tab)),
     };
 
     let status = text(state.status.clone().unwrap_or_default());
@@ -556,9 +580,12 @@ fn view_stack(state: &AppState) -> Element<'_, Message> {
     }
 }
 
-fn visible_symbol_groups(state: &AppState) -> Vec<(&'static str, Vec<&'static str>)> {
+fn visible_symbol_groups(
+    state: &AppState,
+    catalog: &'static [symbols::SymbolGroup],
+) -> Vec<(&'static str, Vec<&'static str>)> {
     let needle = state.search.trim().to_lowercase();
-    symbols::CATALOG
+    catalog
         .iter()
         .filter_map(|group| {
             let matches: Vec<&'static str> =
@@ -581,8 +608,11 @@ fn visible_symbol_groups(state: &AppState) -> Vec<(&'static str, Vec<&'static st
         .collect()
 }
 
-fn view_symbols(state: &AppState) -> Element<'_, Message> {
-    let groups = visible_symbol_groups(state);
+fn view_symbol_catalog<'a>(
+    state: &'a AppState,
+    catalog: &'static [symbols::SymbolGroup],
+) -> Element<'a, Message> {
+    let groups = visible_symbol_groups(state, catalog);
 
     if groups.is_empty() {
         text("Nenhum resultado pra essa busca.").into()
