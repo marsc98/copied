@@ -9,7 +9,7 @@ use iced::keyboard::key::Named;
 use iced::keyboard::{Event as KeyboardEvent, Key};
 use iced::widget::image::Handle as ImageHandle;
 use iced::widget::{
-    button, column, container, image, mouse_area, row, rule, scrollable, text, text_input,
+    button, column, container, grid, image, mouse_area, row, rule, scrollable, text, text_input,
 };
 use iced::{Element, Length, Subscription, Task};
 use iced_layershell::to_layer_message;
@@ -62,6 +62,7 @@ const BOLD_FONT: iced::Font = iced::Font {
 };
 
 const BUTTON_RADIUS: f32 = 8.0;
+const SYMBOL_BUTTON_SIZE: f32 = 44.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingAction {
@@ -623,11 +624,17 @@ fn view_symbol_catalog<'a>(
                 button(text(symbol))
                     .on_press(Message::SymbolClicked(symbol))
                     .style(move |theme, status| symbol_button_style(theme, status, selected))
+                    .width(Length::Fixed(SYMBOL_BUTTON_SIZE))
                     .into()
             });
-            column![text(name), row(buttons).spacing(4)]
-                .spacing(4)
-                .into()
+            column![
+                text(name),
+                grid::Grid::with_children(buttons)
+                    .fluid(SYMBOL_BUTTON_SIZE)
+                    .spacing(4)
+            ]
+            .spacing(4)
+            .into()
         });
         scrollable(column(sections).spacing(10).width(Length::Fill)).into()
     }
