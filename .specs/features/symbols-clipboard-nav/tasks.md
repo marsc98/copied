@@ -183,12 +183,14 @@ SYMBOL_GRID_COLUMNS: usize = 9;` declarada junto de `SYMBOL_BUTTON_SIZE`.
 - Skill: NONE
 
 **Done when**:
-- [ ] `SYMBOL_GRID_COLUMNS: usize = 9` declarada
-- [ ] `view_symbol_catalog` usa `.columns(SYMBOL_GRID_COLUMNS)` em vez de
+- [x] `SYMBOL_GRID_COLUMNS: usize = 9` declarada
+- [x] `view_symbol_catalog` usa `.columns(SYMBOL_GRID_COLUMNS)` em vez de
       `.fluid(...)`
 - [ ] Verificação manual: `cargo run -p copied-gui`, aba Símbolos e Emojis
       mostram 9 colunas por linha, densidade visual igual à de antes
-- [ ] Gate check passa: `cargo test -p copied-gui && cargo clippy -p copied-gui -- -D warnings`
+      **PENDENTE**: sem display Wayland interativo neste ambiente pra
+      screenshot — precisa ser verificado pelo usuário
+- [x] Gate check passa: `cargo test -p copied-gui && cargo clippy -p copied-gui -- -D warnings`
 
 **Tests**: none (matriz `TESTING.md` cobre `copied-gui::app` como Manual)
 **Gate**: quick
