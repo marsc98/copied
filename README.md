@@ -37,8 +37,11 @@ Detalhes de arquitetura, fluxo de dados e decisões de design: [`.specs/codebase
 - **Rust** (toolchain `stable`, ver `rust-toolchain.toml`) com `cargo` no `PATH`. Se não tiver: [rustup.rs](https://rustup.rs).
 - `systemd --user` disponível (padrão em qualquer sessão de usuário Linux com systemd).
 - `sudo` disponível pra um único passo do instalador (grava `/etc/profile.d/copied-clipboard.sh`).
+- **`libxkbcommon-dev`** (e `pkg-config`) instalados — dependência de **build-time** da GUI (`smithay-client-toolkit`), diferente das outras libs Wayland que são carregadas em runtime via `dlopen`. Sem isso o `cargo build`/`install.sh` falha com `Package xkbcommon was not found in the pkg-config search path`. Instale antes de rodar o instalador:
 
-Não há dependências de sistema pra compilar (bibliotecas Wayland são carregadas em runtime via `dlopen`, não em build-time).
+  ```bash
+  sudo apt-get install -y libxkbcommon-dev pkg-config
+  ```
 
 ## Instalação
 
