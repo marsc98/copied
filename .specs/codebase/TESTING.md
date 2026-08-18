@@ -2,6 +2,7 @@
 
 **Status**: Estratégia definida em `/taskify` (2026-07-03). Atualizado em 2026-07-04 (brownfield mapping) — testes unitários já escritos e presentes no código (confirmado por leitura direta dos arquivos-fonte).
 **Atualizado novamente em 2026-07-04** (feature `copied-gui`): TUI (`copied-cli`) substituída por GUI (`copied-gui`); protocolo ganhou `GetImageBytes`/`SetCategory`.
+**Atualizado novamente em 2026-08-18** (feature `symbols-emoji-catalog`): `copied-gui::symbols` ganhou `EMOJI_CATALOG` e teste correspondente; `copied-gui::app` ganhou a aba Emojis.
 
 ## Test Frameworks
 
@@ -25,10 +26,10 @@
 | `copied-daemon::ipc` (dispatch de `GetImageBytes`/`SetCategory`) | Unit (`cargo test`, `tempfile`) | `crates/copied-daemon/src/ipc.rs` (4 testes) | `cargo test -p copied-daemon` |
 | `copied-gui::ipc_client` (protocolo de fio NDJSON)    | Unit/Integration (`cargo test`, socket real) | `crates/copied-gui/src/ipc_client.rs` (1 teste, `UnixListener` real em thread) | `cargo test -p copied-gui` |
 | `copied-gui::instance_lock` (toggle de instância única, lock órfão) | Unit (`cargo test`, processos reais via `std::process::Command`) | `crates/copied-gui/src/instance_lock.rs` (3 testes) | `cargo test -p copied-gui` |
-| `copied-gui::symbols` (catálogo estático não-vazio)   | Unit (`cargo test`, trivial) | `crates/copied-gui/src/symbols.rs` (1 teste) | `cargo test -p copied-gui` |
+| `copied-gui::symbols` (catálogos estáticos não-vazios: símbolos e emojis) | Unit (`cargo test`, trivial) | `crates/copied-gui/src/symbols.rs` (2 testes) | `cargo test -p copied-gui` |
 | `copied-daemon::watcher` (Wayland ext-data-control)   | Manual              | Rodar daemon real, copiar conteúdo, observar log/pilha | N/A |
 | `copied-daemon::clipboard_write` (escrita real)       | Manual              | Rodar daemon real, copiar de volta, colar em outro app | N/A |
-| `copied-gui::app` (event loop de UI: nav teclado/mouse, busca, preview, categoria, aba símbolos) | Manual              | Rodar `copied-gui` real, popular pilha, testar cada ação | N/A |
+| `copied-gui::app` (event loop de UI: nav teclado/mouse, busca, preview, categoria, abas símbolos e emojis) | Manual              | Rodar `copied-gui` real, popular pilha, testar cada ação, incluindo navegação por grade na aba Emojis | N/A |
 | `copied-gui::main` (janela layer-shell, toggle de instância, Esc) | Manual              | Acionar o binário, testar popup/toggle/Esc num compositor Wayland real | N/A |
 | systemd unit / autostart                              | Manual              | `systemctl --user status`, logout/login | N/A |
 
@@ -37,7 +38,7 @@
 ## Test Execution
 
 ```bash
-cargo test --workspace          # roda todos os testes unitários/integração (48 testes no total)
+cargo test --workspace          # roda todos os testes unitários/integração (49 testes no total)
 cargo test -p copied-daemon      # só o crate do daemon
 cargo test -p copied-gui         # só o crate do cliente gráfico
 cargo clippy --workspace -- -D warnings
