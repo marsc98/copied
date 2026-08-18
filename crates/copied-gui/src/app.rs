@@ -636,7 +636,13 @@ fn view_symbol_catalog<'a>(
             .spacing(4)
             .into()
         });
-        scrollable(column(sections).spacing(10).width(Length::Fill)).into()
+        scrollable(
+            column(sections)
+                .spacing(10)
+                .width(Length::Fill)
+                .padding([0, 12]),
+        )
+        .into()
     }
 }
 
