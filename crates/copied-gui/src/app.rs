@@ -55,6 +55,7 @@ fn active_catalog(tab: Tab) -> &'static [symbols::SymbolGroup] {
 
 const SEARCH_ID: &str = "copied-gui-search";
 const LIST_ID: &str = "copied-gui-list";
+const SYMBOL_LIST_ID: &str = "copied-gui-symbol-list";
 
 const BOLD_FONT: iced::Font = iced::Font {
     weight: iced::font::Weight::Bold,
@@ -322,7 +323,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             }
             Tab::Symbols | Tab::Emojis => {
                 state.move_symbol_row(delta);
-                Task::none()
+                scroll_to_symbol_selection(state)
             }
         },
         Message::MoveSymbolIndex(delta) => {
@@ -421,6 +422,42 @@ fn scroll_to_selection(state: &AppState) -> Task<Message> {
     let fraction = index as f32 / (visible.len() - 1) as f32;
     iced::widget::operation::snap_to(
         LIST_ID,
+        iced::widget::operation::RelativeOffset {
+            x: 0.0,
+            y: fraction,
+        },
+    )
+}
+
+fn scroll_to_symbol_selection(state: &AppState) -> Task<Message> {
+    let groups = visible_symbol_groups(state, active_catalog(state.active_tab));
+    let Some(selected) = state.selected_symbol else {
+        return Task::none();
+    };
+    let Some((group_idx, index)) = groups.iter().enumerate().find_map(|(gi, (_, symbols))| {
+        symbols
+            .iter()
+            .position(|s| *s == selected)
+            .map(|idx| (gi, idx))
+    }) else {
+        return Task::none();
+    };
+    let rows_before: usize = groups[..group_idx]
+        .iter()
+        .map(|(_, symbols)| symbol_row_count(symbols.len()))
+        .sum();
+    let row = index / SYMBOL_GRID_COLUMNS;
+    let total_rows: usize = groups
+        .iter()
+        .map(|(_, symbols)| symbol_row_count(symbols.len()))
+        .sum();
+    if total_rows <= 1 {
+        return Task::none();
+    }
+    let current_row = rows_before + row;
+    let fraction = current_row as f32 / (total_rows - 1) as f32;
+    iced::widget::operation::snap_to(
+        SYMBOL_LIST_ID,
         iced::widget::operation::RelativeOffset {
             x: 0.0,
             y: fraction,
@@ -689,6 +726,7 @@ fn view_symbol_catalog<'a>(
                 .width(Length::Fill)
                 .padding(iced::padding::right(18).bottom(15)),
         )
+        .id(SYMBOL_LIST_ID)
         .into()
     }
 }

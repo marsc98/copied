@@ -274,15 +274,17 @@ RelativeOffset { x: 0.0, y: fraction })` em vez de `Task::none()` no braço
 - Skill: NONE
 
 **Done when**:
-- [ ] `view_symbol_catalog` dá `.id(SYMBOL_LIST_ID)` ao `scrollable`
-- [ ] Mover a seleção com ↑/↓ (inclusive cruzando grupo) retorna um `Task`
+- [x] `view_symbol_catalog` dá `.id(SYMBOL_LIST_ID)` ao `scrollable`
+- [x] Mover a seleção com ↑/↓ (inclusive cruzando grupo) retorna um `Task`
       de `snap_to` proporcional à posição da linha selecionada
-- [ ] `Message::MoveSymbolIndex` (←/→) continua retornando `Task::none()`,
+- [x] `Message::MoveSymbolIndex` (←/→) continua retornando `Task::none()`,
       sem auto-scroll — sem alteração nesta task
-- [ ] Gate check passa: `cargo test -p copied-gui && cargo clippy -p copied-gui -- -D warnings`
+- [x] Gate check passa: `cargo test -p copied-gui && cargo clippy -p copied-gui -- -D warnings`
 - [ ] Verificação manual: `cargo run -p copied-gui`, navegar com ↓ por um
       grupo grande e confirmar que a view rola sozinha acompanhando a
       seleção
+      **PENDENTE**: sem display Wayland interativo neste ambiente — precisa
+      ser verificado pelo usuário
 
 **Tests**: none (matriz `TESTING.md` cobre `copied-gui::app` como Manual)
 **Gate**: quick
