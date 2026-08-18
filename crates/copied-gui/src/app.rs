@@ -640,7 +640,7 @@ fn view_symbol_catalog<'a>(
             column(sections)
                 .spacing(10)
                 .width(Length::Fill)
-                .padding(iced::padding::right(12)),
+                .padding(iced::padding::right(24)),
         )
         .into()
     }
