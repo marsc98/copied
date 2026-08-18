@@ -5,6 +5,11 @@
 # Claude Code local state (não faz parte do projeto)
 .claude/
 
+# .specs: só a documentação de codebase é versionada (features/helpers são
+# artefatos de trabalho locais do workflow SDD)
+/.specs/*
+!/.specs/codebase/
+
 # Editores
 .vscode/
 .idea/
