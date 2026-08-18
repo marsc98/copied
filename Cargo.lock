@@ -684,7 +684,6 @@ dependencies = [
  "libc",
  "serde_json",
  "tempfile",
- "wl-clipboard-rs",
 ]
 
 [[package]]

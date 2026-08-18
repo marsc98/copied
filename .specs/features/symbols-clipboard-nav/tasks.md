@@ -113,16 +113,19 @@ runtime)
 - Skill: NONE
 
 **Done when**:
-- [ ] `SymbolClicked` manda `Command::CopyText` pro daemon em vez de
+- [x] `SymbolClicked` manda `Command::CopyText` pro daemon em vez de
       escrever na clipboard direto
-- [ ] `EnterPressed` (foco `Search`/`List`, aba Símbolos/Emojis) faz o mesmo
-- [ ] Função `copy_symbol_to_clipboard` removida de `app.rs`
-- [ ] Dependência `wl-clipboard-rs` removida de `crates/copied-gui/Cargo.toml`
-- [ ] `cargo build -p copied-gui` compila sem a dependência
-- [ ] Gate check passa: `cargo test -p copied-gui && cargo clippy -p copied-gui -- -D warnings`
+- [x] `EnterPressed` (foco `Search`/`List`, aba Símbolos/Emojis) faz o mesmo
+- [x] Função `copy_symbol_to_clipboard` removida de `app.rs`
+- [x] Dependência `wl-clipboard-rs` removida de `crates/copied-gui/Cargo.toml`
+- [x] `cargo build -p copied-gui` compila sem a dependência
+- [x] Gate check passa: `cargo test -p copied-gui && cargo clippy -p copied-gui -- -D warnings`
 - [ ] Verificação manual: `cargo run -p copied-gui`, clicar num emoji,
       confirmar que `wl-paste` (ou colar em outro app) mostra o conteúdo
       **depois** da GUI já ter fechado
+      **PENDENTE**: `wl-paste`/`xclip`/`xsel` indisponíveis neste ambiente —
+      verificação manual não pôde ser executada aqui, precisa ser feita pelo
+      usuário
 
 **Tests**: none (matriz `TESTING.md` cobre `copied-gui::app` como Manual)
 **Gate**: quick

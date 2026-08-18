@@ -12,7 +12,6 @@ copied-core = { path = "../copied-core" }
 iced = { version = "0.14", features = ["image"] }
 iced_layershell = "0.18"
 serde_json = "1"
-wl-clipboard-rs = "0.9"
 base64 = "0.22"
 libc = "0.2.186"
 futures = "0.3"

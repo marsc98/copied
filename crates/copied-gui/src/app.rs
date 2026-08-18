@@ -364,11 +364,14 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 Tab::Symbols | Tab::Emojis => {
                     if let Some(symbol) = state.selected_symbol {
-                        let _ = copy_symbol_to_clipboard(symbol);
-                        iced::exit()
-                    } else {
-                        Task::none()
+                        state.send(
+                            Command::CopyText {
+                                text: symbol.to_string(),
+                            },
+                            PendingAction::Copy,
+                        );
                     }
+                    Task::none()
                 }
             },
         },
@@ -404,19 +407,17 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::SymbolClicked(symbol) => {
-            let _ = copy_symbol_to_clipboard(symbol);
-            iced::exit()
+            state.send(
+                Command::CopyText {
+                    text: symbol.to_string(),
+                },
+                PendingAction::Copy,
+            );
+            Task::none()
         }
         Message::CloseRequested => iced::exit(),
         _ => Task::none(),
     }
-}
-
-fn copy_symbol_to_clipboard(symbol: &str) -> Result<(), wl_clipboard_rs::copy::Error> {
-    use wl_clipboard_rs::copy::{self, MimeType, Options, Source};
-    let options = Options::default();
-    let source = Source::Bytes(symbol.as_bytes().to_vec().into_boxed_slice());
-    copy::copy(options, source, MimeType::Text)
 }
 
 fn scroll_to_selection(state: &AppState) -> Task<Message> {
