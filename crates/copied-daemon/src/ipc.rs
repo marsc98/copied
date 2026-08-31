@@ -152,12 +152,14 @@ fn handle_command(state: &mut DaemonState, cmd: Command) -> Response {
                 message: format!("falha escrevendo no clipboard: {err}"),
             },
         },
+
+        Command::GetLatestText => get_latest_text(state),
+
+        Command::GetLatestImageBytes => get_latest_image_bytes(state),
     }
 }
 
 fn get_image_bytes(state: &DaemonState, id: copied_core::ItemId) -> Response {
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
-
     let Some(item) = state.stack.get(id) else {
         return not_found();
     };
@@ -166,15 +168,45 @@ fn get_image_bytes(state: &DaemonState, id: copied_core::ItemId) -> Response {
             message: "item não é uma imagem".into(),
         };
     };
+    image_bytes_response(path, mime)
+}
+
+fn image_bytes_response(path: &std::path::Path, mime: &str) -> Response {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
     match std::fs::read(path) {
         Ok(bytes) => Response::ImageBytes {
-            mime: mime.clone(),
+            mime: mime.into(),
             data_base64: STANDARD.encode(bytes),
         },
         Err(err) => Response::Error {
             message: format!("falha lendo arquivo de imagem: {err}"),
         },
     }
+}
+
+fn get_latest_text(state: &DaemonState) -> Response {
+    let Some(item) = state.stack.items().next() else {
+        return empty_stack();
+    };
+    let ItemKind::Text(text) = &item.kind else {
+        return Response::Error {
+            message: "item mais recente não é texto".into(),
+        };
+    };
+    Response::Text(text.clone())
+}
+
+fn get_latest_image_bytes(state: &DaemonState) -> Response {
+    let Some(item) = state.stack.items().next() else {
+        return empty_stack();
+    };
+    let ItemKind::Image { path, mime, .. } = &item.kind else {
+        return Response::Error {
+            message: "item mais recente não é uma imagem".into(),
+        };
+    };
+    image_bytes_response(path, mime)
 }
 
 fn copy_to_clipboard(state: &DaemonState, id: copied_core::ItemId) -> Response {
@@ -219,10 +251,37 @@ fn not_found() -> Response {
     }
 }
 
+fn empty_stack() -> Response {
+    Response::Error {
+        message: "pilha vazia".into(),
+    }
+}
+
 fn list_views(stack: &Stack) -> Vec<ItemView> {
     let pins = stack.pins().map(|item| item_view(item, true));
     let items = stack.items().map(|item| item_view(item, false));
     pins.chain(items).collect()
+}
+
+fn item_view(item: &Item, pinned: bool) -> ItemView {
+    let kind = match &item.kind {
+        ItemKind::Text(text) => ItemKindView::Text {
+            preview: text.chars().take(200).collect(),
+        },
+        ItemKind::Image {
+            mime, size_bytes, ..
+        } => ItemKindView::Image {
+            mime: mime.clone(),
+            size_bytes: *size_bytes,
+        },
+    };
+    ItemView {
+        id: item.id,
+        kind,
+        pinned,
+        copied_at: item.copied_at,
+        category: item.category,
+    }
 }
 
 #[cfg(test)]
@@ -306,25 +365,78 @@ mod tests {
 
         assert!(matches!(response, Response::Error { .. }));
     }
-}
 
-fn item_view(item: &Item, pinned: bool) -> ItemView {
-    let kind = match &item.kind {
-        ItemKind::Text(text) => ItemKindView::Text {
-            preview: text.chars().take(200).collect(),
-        },
-        ItemKind::Image {
-            mime, size_bytes, ..
-        } => ItemKindView::Image {
-            mime: mime.clone(),
-            size_bytes: *size_bytes,
-        },
-    };
-    ItemView {
-        id: item.id,
-        kind,
-        pinned,
-        copied_at: item.copied_at,
-        category: item.category,
+    #[test]
+    fn handle_get_latest_text_returns_full_text_of_top_item() {
+        let (mut state, _dir) = test_state();
+        state.stack.insert(Item::new_text("older".into()));
+        state.stack.insert(Item::new_text("newest".into()));
+
+        let response = handle_command(&mut state, Command::GetLatestText);
+
+        assert_eq!(response, Response::Text("newest".into()));
+    }
+
+    #[test]
+    fn handle_get_latest_text_errors_when_stack_empty() {
+        let (mut state, _dir) = test_state();
+
+        let response = handle_command(&mut state, Command::GetLatestText);
+
+        assert!(matches!(response, Response::Error { .. }));
+    }
+
+    #[test]
+    fn handle_get_latest_text_errors_when_top_item_is_image() {
+        let (mut state, dir) = test_state();
+        let bytes = b"fake-png-bytes";
+        let path = dir.path().join("img.png");
+        std::fs::write(&path, bytes).unwrap();
+        let hash = crate::stack::content_hash(bytes);
+        state.stack.insert(Item::new_image(
+            path,
+            "image/png".into(),
+            bytes.len() as u64,
+            hash,
+        ));
+
+        let response = handle_command(&mut state, Command::GetLatestText);
+
+        assert!(matches!(response, Response::Error { .. }));
+    }
+
+    #[test]
+    fn handle_get_latest_image_bytes_returns_bytes_for_top_image() {
+        let (mut state, dir) = test_state();
+        let bytes = b"fake-png-bytes";
+        let path = dir.path().join("img.png");
+        std::fs::write(&path, bytes).unwrap();
+        let hash = crate::stack::content_hash(bytes);
+        state.stack.insert(Item::new_image(
+            path,
+            "image/png".into(),
+            bytes.len() as u64,
+            hash,
+        ));
+
+        let response = handle_command(&mut state, Command::GetLatestImageBytes);
+
+        match response {
+            Response::ImageBytes { mime, data_base64 } => {
+                assert_eq!(mime, "image/png");
+                use base64::{engine::general_purpose::STANDARD, Engine as _};
+                assert_eq!(STANDARD.decode(data_base64).unwrap(), bytes);
+            }
+            other => panic!("esperava Response::ImageBytes, veio {other:?}"),
+        }
+    }
+
+    #[test]
+    fn handle_get_latest_image_bytes_errors_when_stack_empty() {
+        let (mut state, _dir) = test_state();
+
+        let response = handle_command(&mut state, Command::GetLatestImageBytes);
+
+        assert!(matches!(response, Response::Error { .. }));
     }
 }

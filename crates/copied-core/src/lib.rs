@@ -29,6 +29,8 @@ pub enum Command {
     GetImageBytes { id: ItemId },
     SetCategory { id: ItemId, category: Category },
     CopyText { text: String },
+    GetLatestText,
+    GetLatestImageBytes,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -38,6 +40,7 @@ pub enum Response {
     Ack,
     Error { message: String },
     ImageBytes { mime: String, data_base64: String },
+    Text(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -160,6 +163,21 @@ mod tests {
             mime: "image/png".into(),
             data_base64: "iVBORw0KGgo=".into(),
         });
+    }
+
+    #[test]
+    fn command_get_latest_text_roundtrips() {
+        roundtrip(Command::GetLatestText);
+    }
+
+    #[test]
+    fn command_get_latest_image_bytes_roundtrips() {
+        roundtrip(Command::GetLatestImageBytes);
+    }
+
+    #[test]
+    fn response_text_roundtrips() {
+        roundtrip(Response::Text("hello world".into()));
     }
 
     #[test]

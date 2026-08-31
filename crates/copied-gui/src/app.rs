@@ -290,6 +290,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     }
                     Task::none()
                 }
+                Response::Text(_) => Task::none(),
             }
         }
         Message::ItemHovered(id) => {
